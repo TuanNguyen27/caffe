@@ -130,6 +130,51 @@ class ConvolutionLayer : public Layer<Dtype> {
   int N_;
 };
 
+/* DeConvolutionLayer
+*/
+template <typename Dtype>
+class DeConvolutionLayer : public Layer<Dtype> {
+ public:
+  explicit DeConvolutionLayer(const LayerParameter& param)
+      : Layer<Dtype>(param) {}
+  virtual void SetUp(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual inline LayerParameter_LayerType type() const {
+    return LayerParameter_LayerType_DECONVOLUTION;
+  }
+  virtual inline int ExactNumBottomBlobs() const { return 1; }
+  virtual inline int ExactNumTopBlobs() const { return 1; }
+
+ protected:
+  virtual Dtype Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual Dtype Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+
+  int kernel_size_;
+  int stride_;
+  int num_;
+  int channels_;
+  int pad_;
+  int height_;
+  int width_;
+  int height_out_;
+  int width_out_;
+  int num_output_;
+  int group_;
+  Blob<Dtype> col_buffer_;
+  shared_ptr<SyncedMemory> bias_multiplier_;
+  bool bias_term_;
+  int M_;
+  int K_;
+  int N_;
+};
+
 /* EltwiseLayer
   Compute elementwise operations like product or sum.
 */
@@ -259,6 +304,7 @@ class InnerProductLayer : public Layer<Dtype> {
 
 // Forward declare PoolingLayer and SplitLayer for use in LRNLayer.
 template <typename Dtype> class PoolingLayer;
+template <typename Dtype> class UnPoolingLayer;
 template <typename Dtype> class SplitLayer;
 
 /* LRNLayer
@@ -372,6 +418,47 @@ class PoolingLayer : public Layer<Dtype> {
   Blob<Dtype> rand_idx_;
   shared_ptr<Blob<int> > max_idx_;
 };
+
+/* UnPoolingLayer
+*/
+template <typename Dtype>
+class UnPoolingLayer : public Layer<Dtype> {
+ public:
+  explicit UnPoolingLayer(const LayerParameter& param)
+      : Layer<Dtype>(param) {}
+  virtual void SetUp(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual inline LayerParameter_LayerType type() const {
+    return LayerParameter_LayerType_UNPOOLING;
+  }
+  virtual inline int ExactNumBottomBlobs() const { return 2; }
+  virtual inline int MinTopBlobs() const { return 1; }
+  virtual inline int MaxTopBlobs() const { return max_top_blobs_; }
+
+ protected:
+  virtual Dtype Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual Dtype Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+
+  int max_top_blobs_;
+  int kernel_size_;
+  int stride_;
+  int pad_;
+  int channels_;
+  int height_;
+  int width_;
+  int pooled_height_;
+  int pooled_width_;
+  Blob<Dtype> rand_idx_;
+  shared_ptr<Blob<int> > max_idx_;
+};
+
 
 /* SoftmaxLayer
 */

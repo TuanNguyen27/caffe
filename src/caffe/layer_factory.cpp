@@ -32,6 +32,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new ConcatLayer<Dtype>(param);
   case LayerParameter_LayerType_CONVOLUTION:
     return new ConvolutionLayer<Dtype>(param);
+  case LayerParameter_LayerType_DECONVOLUTION:
+    return new DeConvolutionLayer<Dtype>(param);
   case LayerParameter_LayerType_DATA:
     return new DataLayer<Dtype>(param);
   case LayerParameter_LayerType_DROPOUT:
@@ -66,6 +68,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new MultinomialLogisticLossLayer<Dtype>(param);
   case LayerParameter_LayerType_POOLING:
     return new PoolingLayer<Dtype>(param);
+  case LayerParameter_LayerType_UNPOOLING:
+    return new UnPoolingLayer<Dtype>(param);
   case LayerParameter_LayerType_POWER:
     return new PowerLayer<Dtype>(param);
   case LayerParameter_LayerType_RELU:
