@@ -526,6 +526,10 @@ LayerParameter_LayerType UpgradeV0LayerType(const string& type) {
     return LayerParameter_LayerType_MULTINOMIAL_LOGISTIC_LOSS;
   } else if (type == "pool") {
     return LayerParameter_LayerType_POOLING;
+  } else if (type == "unpool") {
+    return LayerParameter_LayerType_UNPOOLING;
+  } else if (type == "deconv") {
+    return LayerParameter_LayerType_DECONVOLUTION;
   } else if (type == "relu") {
     return LayerParameter_LayerType_RELU;
   } else if (type == "sigmoid") {

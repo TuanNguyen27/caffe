@@ -69,11 +69,13 @@ void Caffe::SetDevice(const int device_id) {
   if (current_device == device_id) {
     return;
   }
+  // The call to cudaSetDevice must come before any calls to Get, which
+  // may perform initialization using the GPU.
+  CUDA_CHECK(cudaSetDevice(device_id));
   if (Get().cublas_handle_) CUBLAS_CHECK(cublasDestroy(Get().cublas_handle_));
   if (Get().curand_generator_) {
     CURAND_CHECK(curandDestroyGenerator(Get().curand_generator_));
   }
-  CUDA_CHECK(cudaSetDevice(device_id));
   CUBLAS_CHECK(cublasCreate(&Get().cublas_handle_));
   CURAND_CHECK(curandCreateGenerator(&Get().curand_generator_,
       CURAND_RNG_PSEUDO_DEFAULT));
@@ -124,7 +126,7 @@ class Caffe::RNG::Generator {
   shared_ptr<caffe::rng_t> rng_;
 };
 
-Caffe::RNG::RNG() : generator_(new Generator) { }
+Caffe::RNG::RNG() : generator_(new Generator()) { }
 
 Caffe::RNG::RNG(unsigned int seed) : generator_(new Generator(seed)) { }
 
