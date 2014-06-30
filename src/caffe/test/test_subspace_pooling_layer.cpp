@@ -45,7 +45,7 @@ class SubspacePoolingLayerTest : public ::testing::Test {
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
 
-  void TestForward() {
+  void TestForwardMax() {
     LayerParameter layer_param;
     PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
     pooling_param->set_kernel_size(2);
@@ -138,6 +138,49 @@ class SubspacePoolingLayerTest : public ::testing::Test {
       //   std::cout << blob_top_mask_->cpu_data()[i] << " " << std::endl;
     }
   }
+
+  void TestForwardAve() {
+    LayerParameter layer_param;
+    PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+    pooling_param->set_kernel_size(2);
+    pooling_param->set_stride(2);
+    pooling_param->set_pool(PoolingParameter_PoolMethod_AVE);
+    blob_bottom_->Reshape(1, 2, 3, 3);
+    // fill channels with c +:
+    // [1 2 3]
+    // [1 2 3]
+    // [1 2 3]
+    for (int c= 0; c <  2; c++) {
+      int idx = blob_bottom_->offset(0, c);
+      blob_bottom_->mutable_cpu_data()[idx +  0] = 1 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  1] = 2 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  2] = 3 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  3] = 1 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  4] = 2 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  5] = 3 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  6] = 1 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  7] = 2 + c;
+      blob_bottom_->mutable_cpu_data()[idx +  8] = 3 + c;
+    }
+    SubspacePoolingLayer<Dtype> layer(layer_param);
+    layer.SetUp(blob_bottom_vec_, &(blob_top_vec_));
+    EXPECT_EQ(blob_top_->num(), 1);
+    EXPECT_EQ(blob_top_->channels(), 1);
+    EXPECT_EQ(blob_top_->height(), 3);
+    EXPECT_EQ(blob_top_->width(), 3);
+    layer.Forward(blob_bottom_vec_, &(blob_top_vec_));
+    Dtype epsilon = 1e-5;
+    EXPECT_NEAR(blob_top_->cpu_data()[0], 1.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[1], 2.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[2], 3.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[3], 1.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[4], 2.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[5], 3.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[6], 1.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[7], 2.5, epsilon);
+    EXPECT_NEAR(blob_top_->cpu_data()[8], 3.5, epsilon);
+  }
+
 };
 
 typedef ::testing::Types<float, double> Dtypes;
@@ -158,24 +201,24 @@ TYPED_TEST(SubspacePoolingLayerTest, TestSetup) {
 
 TYPED_TEST(SubspacePoolingLayerTest, TestCPUForwardMax) {
   Caffe::set_mode(Caffe::CPU);
-  this->TestForward();
+  this->TestForwardMax();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestGPUForwardMax) {
   Caffe::set_mode(Caffe::GPU);
-  this->TestForward();
+  this->TestForwardMax();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestCPUForwardMaxTopMask) {
   Caffe::set_mode(Caffe::CPU);
   this->blob_top_vec_.push_back(this->blob_top_mask_);
-  this->TestForward();
+  this->TestForwardMax();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestGPUForwardMaxTopMask) {
   Caffe::set_mode(Caffe::GPU);
   this->blob_top_vec_.push_back(this->blob_top_mask_);
-  this->TestForward();
+  this->TestForwardMax();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestCPUGradientMax) {
@@ -207,89 +250,13 @@ TYPED_TEST(SubspacePoolingLayerTest, TestGPUGradientMax) {
 
 
 TYPED_TEST(SubspacePoolingLayerTest, TestCPUForwardAve) {
-  LayerParameter layer_param;
-  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
-  pooling_param->set_kernel_size(2);
-  pooling_param->set_stride(2);
-  pooling_param->set_pool(PoolingParameter_PoolMethod_AVE);
   Caffe::set_mode(Caffe::CPU);
-  this->blob_bottom_->Reshape(1, 2, 3, 3);
-  // fill channels with c +:
-  // [1 2 3]
-  // [1 2 3]
-  // [1 2 3]
-  for (int c= 0; c <  2; c++) {
-      int idx = this->blob_bottom_->offset(0, c);
-      this->blob_bottom_->mutable_cpu_data()[idx +  0] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  1] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  2] = 3 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  3] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  4] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  5] = 3 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  6] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  7] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  8] = 3 + c;
-  }
-  SubspacePoolingLayer<TypeParam> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 1);
-  EXPECT_EQ(this->blob_top_->height(), 3);
-  EXPECT_EQ(this->blob_top_->width(), 3);
-  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  TypeParam epsilon = 1e-5;
-  EXPECT_NEAR(this->blob_top_->cpu_data()[0], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[1], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[2], 3.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[3], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[4], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[5], 3.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[6], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[7], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[8], 3.5, epsilon);
+  this->TestForwardAve();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestGPUForwardAve) {
-  LayerParameter layer_param;
-  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
-  pooling_param->set_kernel_size(2);
-  pooling_param->set_stride(2);
-  pooling_param->set_pool(PoolingParameter_PoolMethod_AVE);
   Caffe::set_mode(Caffe::GPU);
-  this->blob_bottom_->Reshape(1, 2, 3, 3);
-  // fill channels with c +:
-  // [1 2 3]
-  // [1 2 3]
-  // [1 2 3]
-  for (int c= 0; c <  2; c++) {
-      int idx = this->blob_bottom_->offset(0, c);
-      this->blob_bottom_->mutable_cpu_data()[idx +  0] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  1] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  2] = 3 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  3] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  4] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  5] = 3 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  6] = 1 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  7] = 2 + c;
-      this->blob_bottom_->mutable_cpu_data()[idx +  8] = 3 + c;
-  }
-  SubspacePoolingLayer<TypeParam> layer(layer_param);
-  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  EXPECT_EQ(this->blob_top_->num(), 1);
-  EXPECT_EQ(this->blob_top_->channels(), 1);
-  EXPECT_EQ(this->blob_top_->height(), 3);
-  EXPECT_EQ(this->blob_top_->width(), 3);
-  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  TypeParam epsilon = 1e-5;
-  EXPECT_NEAR(this->blob_top_->cpu_data()[0], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[1], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[2], 3.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[3], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[4], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[5], 3.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[6], 1.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[7], 2.5, epsilon);
-  EXPECT_NEAR(this->blob_top_->cpu_data()[8], 3.5, epsilon);
+  this->TestForwardAve();
 }
 
 TYPED_TEST(SubspacePoolingLayerTest, TestCPUGradientAve) {
