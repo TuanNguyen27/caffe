@@ -28,14 +28,14 @@ __global__ void SubspaceMaxPoolForward(const int nthreads, const Dtype* bottom_d
     int w = index % width;
     int h = (index / width) % height;
     int pc = (index / width / height) % pooled_channels;
-    int n = index / width / height / channels;
+    int n = index / width / height / pooled_channels;
     int cstart = pc * stride;
-    int cent = min(cstart + kernel_size, channels);
+    int cend = min(cstart + kernel_size, channels);
     cstart = max(cstart, 0);
     Dtype maxval = -FLT_MAX;
     int maxidx = -1;
     for (int c = cstart; c < cend; ++c) {
-        const int idx = (n * channels + c) * height * width;
+        const int idx = ((n * channels + c) * height  + h) * width + w;
         if (bottom_data[idx] > maxval) {
             maxidx = idx;
             maxval = bottom_data[idx];
@@ -64,15 +64,14 @@ __global__ void SubspaceAvePoolForward(const int nthreads, const Dtype* bottom_d
     int w = index % width;
     int h = (index / width) % height;
     int pc = (index / width / height) % pooled_channels;
-    int n = index / width / height / channels;
+    int n = index / width / height / pooled_channels;
     int cstart = pc * stride;
-    int cent = min(cstart + kernel_size, channels);
+    int cend = min(cstart + kernel_size, channels);
     int pool_size = (cend - cstart);
     cstart = max(cstart, 0);
     Dtype aveval = 0;
-    bottom_data += (n * channels + c) * height * width;
     for (int c = cstart; c < cend; ++c) {
-        const int idx = (n * channels + c) * height * width;
+        const int idx = ((n * channels + c) * height  + h) * width + w;
         aveval += bottom_data[idx];
     }
     top_data[index] = aveval / pool_size;
@@ -133,21 +132,21 @@ __global__ void SubspaceMaxPoolBackward(const int nthreads, const Dtype* top_dif
     int h = (index / width) % height;
     int c = (index / width / height) % channels;
     int n = index / width / height / channels;
-    int pcstart = (c - kernel_size) / stride + 1;
-    int pcend = min(c / stride + 1, pooled_channels);
+    int pcstart = (c + pad < kernel_size) ? 0 : (c + pad - kernel_size) / stride + 1;
+    int pcend = min((c + pad) / stride + 1, pooled_channels);
     Dtype gradient = 0;
     if (mask) {
       for (int pc = pcstart; pc < pcend; ++pc) {
-          const int idx = (n * pooled_channels + pc) * height * width;
-          if (mask[idx] == index) {
-              gradient += top_diff[idx];
+          const int top_index = ((n * pooled_channels + pc) * height  + h) * width + w;
+          if (mask[top_index] == index) {
+              gradient += top_diff[top_index];
           }
       }
     } else {
       for (int pc = pcstart; pc < pcend; ++pc) {
-        const int top_index = (n * pooled_channels + pc) * height * width;
+        const int top_index = ((n * pooled_channels + pc) * height  + h) * width + w;
         if (top_mask[top_index] == index) {
-          gradient += top_diff[top_index];
+            gradient += top_diff[top_index];
         }
       }
     }
@@ -168,14 +167,14 @@ __global__ void SubspaceAvePoolBackward(const int nthreads, const Dtype* top_dif
     int h = (index / width) % height + pad;
     int c = (index / width / height) % channels;
     int n = index / width / height / channels;
-    int pcstart = (c - kernel_size) / stride + 1;
-    int pcend = min(c / stride + 1, pooled_channels);
+    int pcstart = (c + pad < kernel_size) ? 0 : (c + pad - kernel_size) / stride + 1;
+    int pcend = min((c + pad) / stride + 1, pooled_channels);
     Dtype gradient = 0;
     for (int pc = pcstart; pc < pcend; ++pc) {
-        int cstart = pc * stride;
-        int cend = min(cstart + kernel_size, channels);
-        int pool_size = (cend - cstart);
-        int top_index = (n * pooled_channels + pc) * height * width;
+        const int cstart = pc * stride;
+        const int cend = min(cstart + kernel_size, channels);
+        const int pool_size = (cend - cstart);
+        const int top_index = ((n * pooled_channels + pc) * height  + h) * width + w;
         gradient += top_diff[top_index] / pool_size;
     }
     bottom_diff[index] = gradient;

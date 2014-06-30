@@ -85,7 +85,7 @@ Dtype SubspacePoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& botto
     caffe_set(top_count, Dtype(-FLT_MAX), top_data);
     // The main loop
     for (int n = 0; n < bottom[0]->num(); ++n) {
-      for (int pc = 0; pc < channels_; ++pc) {
+      for (int pc = 0; pc < pooled_channels_; ++pc) {
         for (int h = 0; h < height_; ++h) {
           for (int w = 0; w < width_; ++w) {
             int cstart = pc * stride_;
@@ -95,11 +95,11 @@ Dtype SubspacePoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& botto
             for (int c = cstart; c < cend; ++c) {
                 const int index = bottom[0]->offset(n, c, h, w);
                 if (bottom_data[index] > top_data[pool_index]) {
-                  top_data[pool_index] = bottom_data[index];
+                    top_data[pool_index] = bottom_data[index];
                   if (use_top_mask) {
-                    top_mask[pool_index] = static_cast<Dtype>(index);
+                      top_mask[pool_index] = static_cast<Dtype>(index);
                   } else {
-                    mask[pool_index] = index;
+                      mask[pool_index] = index;
                   }
                 }
             }
@@ -166,9 +166,9 @@ void SubspacePoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       mask = max_idx_->cpu_data();
     }
     for (int n = 0; n < top[0]->num(); ++n) {
-      for (int pc = 0; pc < channels_; ++pc) {
-        for (int h = 0; h < pooled_height_; ++h) {
-          for (int w = 0; w < pooled_width_; ++w) {
+      for (int pc = 0; pc < pooled_channels_; ++pc) {
+        for (int h = 0; h < height_; ++h) {
+          for (int w = 0; w < width_; ++w) {
             const int index = top[0]->offset(n, pc, h, w);
             const int bottom_index =
                 use_top_mask ? top_mask[index] : mask[index];
@@ -181,16 +181,16 @@ void SubspacePoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   case PoolingParameter_PoolMethod_AVE:
     // The main loop
     for (int n = 0; n < top[0]->num(); ++n) {
-      for (int pc = 0; pc < channels_; ++pc) {
-        for (int h = 0; h < pooled_height_; ++h) {
-          for (int w = 0; w < pooled_width_; ++w) {
+      for (int pc = 0; pc < pooled_channels_; ++pc) {
+        for (int h = 0; h < height_; ++h) {
+          for (int w = 0; w < width_; ++w) {
             int cstart = pc * stride_;
             int cend = min(cstart + kernel_size_, channels_);
             int pool_size = (cend - cstart);
             cstart = max(cstart, 0);
-            const int index = (*top)[0]->offset(n, pc, h, w);
+            const int index = top[0]->offset(n, pc, h, w);
             for (int c = cstart; c < cend; ++c) {
-                const int bottom_index = bottom[0]->offset(n, c, h, w);
+                const int bottom_index = (*bottom)[0]->offset(n, c, h, w);
                 bottom_diff[bottom_index] += top_diff[index] / pool_size;
             }
           }

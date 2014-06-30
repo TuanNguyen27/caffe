@@ -304,6 +304,7 @@ class InnerProductLayer : public Layer<Dtype> {
 
 // Forward declare PoolingLayer and SplitLayer for use in LRNLayer.
 template <typename Dtype> class PoolingLayer;
+template <typename Dtype> class SubspacePoolingLayer;
 template <typename Dtype> class UnPoolingLayer;
 template <typename Dtype> class SplitLayer;
 
@@ -418,6 +419,47 @@ class PoolingLayer : public Layer<Dtype> {
   Blob<Dtype> rand_idx_;
   shared_ptr<Blob<int> > max_idx_;
 };
+
+
+/* SubspacePoolingLayer
+*/
+template <typename Dtype>
+class SubspacePoolingLayer : public Layer<Dtype> {
+ public:
+  explicit SubspacePoolingLayer(const LayerParameter& param)
+      : Layer<Dtype>(param) {}
+  virtual void SetUp(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+
+  virtual inline LayerParameter_LayerType type() const {
+    return LayerParameter_LayerType_SUBSPACEPOOLING;
+  }
+  virtual inline int ExactNumBottomBlobs() const { return 1; }
+  virtual inline int MinTopBlobs() const { return 1; }
+  virtual inline int MaxTopBlobs() const { return max_top_blobs_; }
+
+ protected:
+  virtual Dtype Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual Dtype Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      vector<Blob<Dtype>*>* top);
+  virtual void Backward_cpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
+      const bool propagate_down, vector<Blob<Dtype>*>* bottom);
+
+  int max_top_blobs_;
+  int kernel_size_;
+  int stride_;
+  int pad_;
+  int channels_;
+  int height_;
+  int width_;
+  int pooled_channels_;
+  Blob<Dtype> rand_idx_;
+  shared_ptr<Blob<int> > max_idx_;
+};
+
 
 /* UnPoolingLayer
 */
