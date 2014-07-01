@@ -193,6 +193,7 @@ message LayerParameter {
   repeated float weight_decay = 8;
 
   optional ArgMaxParameter argmax_param = 23;
+  optional AugmentationParameter augmentation_param = 30;
   optional ConcatParameter concat_param = 9;
   optional ConvolutionParameter convolution_param = 10;
   optional DeConvolutionParameter deconvolution_param = 27;
@@ -212,6 +213,7 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 20;
   optional ThresholdParameter threshold_param = 25;
   optional HingeLossParameter hinge_loss_param = 29;
+  
 
   // DEPRECATED: The layer parameters specified as a V0LayerParameter.
   // This should never be used by any code except to upgrade to the new
@@ -223,6 +225,29 @@ message LayerParameter {
 message ArgMaxParameter {
   // If true produce pairs (argmax, maxval)
   optional bool out_max_val = 1 [default = false];
+}
+
+// Message describing distribution of augmentation parameters
+message AugmentationParameter {
+  optional uint32 crop_size = 1 [default = 0 ];
+  optional string write_augmented = 2 [default = ""];
+  optional float max_multiplier = 3 [default = 100.];
+  optional RandomGeneratorParameter mirror = 10;
+  optional RandomGeneratorParameter translate = 11 ;
+  optional RandomGeneratorParameter rotate = 12 ;
+  optional RandomGeneratorParameter zoom = 13 ;  
+  optional RandomGeneratorParameter lmult_pow = 20 ;
+  optional RandomGeneratorParameter lmult_mult = 21 ;
+  optional RandomGeneratorParameter lmult_add = 22 ;
+  optional RandomGeneratorParameter sat_pow = 23 ;
+  optional RandomGeneratorParameter sat_mult = 24 ;
+  optional RandomGeneratorParameter sat_add = 25 ;
+  optional RandomGeneratorParameter col_pow = 26 ;
+  optional RandomGeneratorParameter col_mult = 27 ;
+  optional RandomGeneratorParameter col_add = 28 ;
+  optional RandomGeneratorParameter ladd_pow = 29 ;
+  optional RandomGeneratorParameter ladd_mult = 30 ;
+  optional RandomGeneratorParameter ladd_add = 31 ;  
 }
 
 // Message that stores parameters used by ConcatLayer
@@ -432,6 +457,15 @@ message PowerParameter {
   optional float power = 1 [default = 1.0];
   optional float scale = 2 [default = 1.0];
   optional float shift = 3 [default = 0.0];
+}
+
+// Message used by AugmentationParameter for describing how to generate augmentation parameters
+message RandomGeneratorParameter {
+  optional string rand_type = 1 [default = "uniform" ]; // can be uniform, gaussian, bernoulli
+  optional bool exp = 2 [default = false ]; // after generating the random number, exponentiate it or not 
+  optional float mean = 4 [default = 0. ]; // mean of the random variable
+  optional float spread = 5 [default = 0. ]; // half of interval length for uniform; standard deviation for gaussian 
+  optional float prob = 6 [default = .5];
 }
 
 // Message that stores parameters used by WindowDataLayer
