@@ -61,3 +61,4 @@ _site
 *.sublime-workspace
 *.sublime-project
 
+.nfs*

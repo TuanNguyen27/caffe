@@ -103,6 +103,18 @@ message SolverParameter {
   // random number generator -- useful for reproducible results. Otherwise,
   // (and by default) initialize using a seed derived from the system clock.
   optional int64 random_seed = 20 [default = -1];
+  enum TerminationCriterion {
+    MAX_ITER = 0; // terminates after max_iter
+    TEST_ACCURACY = 1; // terminates when the test set accuracy doesn't improve for test_accuracy_stop_countdown iterations
+    EXTERNAL = 2;
+    EXTERNAL_IN_BACKGROUND = 3;
+    DIVERGENCE_DETECTION = 4;
+  }
+  repeated TerminationCriterion termination_criterion = 23; // The condition that has to be met for the training to stop
+  optional int32 test_accuracy_stop_countdown = 24 [default = 10]; // the number of iterations of non-increasing test accuracy before stopping
+  optional int32 snapshot_on_exit = 25 [default = 0];
+  optional string external_term_criterion_cmd = 26;
+  optional int32 external_term_criterion_num_iter = 27;
 }
 
 // A message that stores the solver snapshots
@@ -127,7 +139,7 @@ message LayerParameter {
   // line above the enum. Update the next available ID when you add a new
   // LayerType.
   //
-  // LayerType next available ID: 36 (last added: SUBSPACEPOOLING)
+  // LayerType next available ID: 37 (last added: DATA_AUGMENTATION)
   enum LayerType {
     // "NONE" layer type is 0th enum element so that we don't cause confusion
     // by defaulting to an existent LayerType (instead, should usually error if
@@ -139,6 +151,7 @@ message LayerParameter {
     CONCAT = 3;
     CONVOLUTION = 4;
     DATA = 5;
+    DATA_AUGMENTATION = 36;
     DROPOUT = 6;
     DUMMY_DATA = 32;
     EUCLIDEAN_LOSS = 7;
@@ -319,6 +332,8 @@ message HDF5DataParameter {
   optional string source = 1;
   // Specify the batch size.
   optional uint32 batch_size = 2;
+  // Load all data/files into memory at startup:
+  optional bool data_in_memory = 3 [default = true];
 }
 
 // Message that stores parameters used by HDF5OutputLayer

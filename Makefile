@@ -1,5 +1,6 @@
 # The makefile for caffe. Pretty hacky.
 PROJECT := caffe
+TEST_GPUID := 0
 
 CONFIG_FILE := Makefile.config
 include $(CONFIG_FILE)
@@ -193,7 +194,7 @@ ifeq ($(BLAS), mkl)
 	# MKL
 	LIBRARIES += mkl_rt
 	COMMON_FLAGS += -DUSE_MKL
-	MKL_DIR = /opt/intel/mkl
+	#MKL_DIR = /opt/intel/mkl
 	BLAS_INCLUDE ?= $(MKL_DIR)/include
 	BLAS_LIB ?= $(MKL_DIR)/lib $(MKL_DIR)/lib/intel64
 else ifeq ($(BLAS), open)

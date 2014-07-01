@@ -175,7 +175,7 @@ TYPED_TEST(MathFunctionsTest, TestFabsGPU) {
   const TypeParam* abs_val = this->blob_bottom_->cpu_diff();
   const TypeParam* x = this->blob_bottom_->cpu_data();
   for (int i = 0; i < n; ++i) {
-    EXPECT_EQ(abs_val[i], x[i] > 0 ? x[i] : -x[i]);
+    EXPECT_FLOAT_EQ(abs_val[i], x[i] > 0 ? x[i] : -x[i]);
   }
 }
 

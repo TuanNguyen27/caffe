@@ -161,13 +161,35 @@ Dtype LRNLayer<Dtype>::CrossChannelForward_cpu(
 }
 
 template <typename Dtype>
+void check_blob_nan(Blob<Dtype>* blob, const char* msg) {
+  const Dtype* d = blob->cpu_data();
+  bool nan_present = false;
+  for(int i = 0; i < blob->count(); i++) {
+    if(d[i] != d[i]) {
+      nan_present = true;
+    }
+  }
+  if (nan_present) {
+    LOG(FATAL) << msg;
+  }
+}
+
+template <typename Dtype>
 Dtype LRNLayer<Dtype>::WithinChannelForward(
     const vector<Blob<Dtype>*>& bottom, vector<Blob<Dtype>*>* top) {
+  //LOG(INFO) << "LRN Layer forward"; 
+  check_blob_nan(bottom[0], "NAN coming from input");
   split_layer_->Forward(bottom, &split_top_vec_);
+  check_blob_nan(split_top_vec_[0], "NAN after split_layer_");
   square_layer_->Forward(square_bottom_vec_, &square_top_vec_);
+  check_blob_nan(square_top_vec_[0], "NAN after square_layer_");
   pool_layer_->Forward(square_top_vec_, &pool_top_vec_);
+  check_blob_nan(pool_top_vec_[0], "NAN after pool_layer_");
   power_layer_->Forward(pool_top_vec_, &power_top_vec_);
+  check_blob_nan(power_top_vec_[0], "NAN after power_layer_");
   product_layer_->Forward(product_bottom_vec_, top);
+  check_blob_nan((*top)[0], "NAN after product_layer_.");
+
   return Dtype(0.);
 }
 
@@ -246,11 +268,19 @@ void LRNLayer<Dtype>::WithinChannelBackward(
     const vector<Blob<Dtype>*>& top, const bool propagate_down,
     vector<Blob<Dtype>*>* bottom) {
   if (propagate_down) {
+    //LOG(INFO) << "LRN Layer backward " << (*bottom).size();
+    check_blob_nan(top[0], "backward NAN coming from top.");
     product_layer_->Backward(top, true, &product_bottom_vec_);
+    check_blob_nan(product_bottom_vec_[0], "backward NAN after product_layer_");
     power_layer_->Backward(power_top_vec_, true, &pool_top_vec_);
+    check_blob_nan(pool_top_vec_[0], "backward NAN after power_layer_");
     pool_layer_->Backward(pool_top_vec_, true, &square_top_vec_);
+    check_blob_nan(square_top_vec_[0], "backward NAN after pool_layer_");
     square_layer_->Backward(square_top_vec_, true, &square_bottom_vec_);
+    check_blob_nan(square_bottom_vec_[0], "backward NAN after square_layer_");
     split_layer_->Backward(split_top_vec_, true, bottom);
+    check_blob_nan(split_top_vec_[0], "backward NAN after split_layer_");
+    check_blob_nan((*bottom)[0], "backward NAN in bottom after split_layer_");
   }
 }
 

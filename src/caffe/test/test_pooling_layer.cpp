@@ -149,8 +149,34 @@ TYPED_TEST(PoolingLayerTest, TestSetupPadded) {
   EXPECT_EQ(this->blob_top_->width(), 3);
 }
 
-/*
-TYPED_TEST(PoolingLayerTest, PrintGPUBackward) {
+
+/*TYPED_TEST(PoolingLayerTest, PrintCPUBackward) {
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(3);
+  pooling_param->set_stride(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
+  Caffe::set_mode(Caffe::CPU);
+  PoolingLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  for (int i = 0; i < this->blob_bottom_->count(); ++i) {
+    cout << "bottom data " << i << " " << this->blob_bottom_->cpu_data()[i] << endl;
+  }
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
+    cout << "top data " << i << " " << this->blob_top_->cpu_data()[i] << endl;
+  }
+
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
+    this->blob_top_->mutable_cpu_diff()[i] = 1.;
+  }
+  layer.Backward(this->blob_top_vec_, true, &(this->blob_bottom_vec_));
+  for (int i = 0; i < this->blob_bottom_->count(); ++i) {
+    cout << "bottom diff " << i << " " << this->blob_bottom_->cpu_diff()[i] << endl;
+  }
+}*/
+
+/*TYPED_TEST(PoolingLayerTest, PrintGPUBackward) {
   LayerParameter layer_param;
   PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
   pooling_param->set_kernel_size(3);
@@ -175,8 +201,7 @@ TYPED_TEST(PoolingLayerTest, PrintGPUBackward) {
   for (int i = 0; i < this->blob_bottom_->count(); ++i) {
     cout << "bottom diff " << i << " " << this->blob_bottom_->cpu_diff()[i] << endl;
   }
-}
-*/
+}*/
 
 /*
 TYPED_TEST(PoolingLayerTest, PrintCPUBackward) {
@@ -439,6 +464,162 @@ TYPED_TEST(PoolingLayerTest, TestGPUForwardAve) {
   EXPECT_NEAR(this->blob_top_->cpu_data()[6], 8.0 / 9, epsilon);
   EXPECT_NEAR(this->blob_top_->cpu_data()[7], 4.0 / 3, epsilon);
   EXPECT_NEAR(this->blob_top_->cpu_data()[8], 8.0 / 9, epsilon);
+}
+
+TYPED_TEST(PoolingLayerTest, TestCPUForwardMax) {
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(2);
+  pooling_param->set_stride(1);
+  pooling_param->set_pad(0);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
+  Caffe::set_mode(Caffe::CPU);
+  this->blob_bottom_->Reshape(1, 1, 3, 3);
+
+  for (int i = 0; i < 3 * 3; ++i)
+  {
+    this->blob_bottom_->mutable_cpu_data()[i] = i + 1;
+  }
+  //with padding we get the following grid:
+  //123
+  //456
+  //789
+  PoolingLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 2);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  TypeParam epsilon = 1e-5;
+
+  double expected [4] = { 5, 6, 8, 9 }; 
+  for (int i = 0; i < 4; ++i)
+  {
+    EXPECT_NEAR(this->blob_top_->cpu_data()[i], expected[i], epsilon);
+  }
+}
+
+
+TYPED_TEST(PoolingLayerTest, TestGPUForwardMax) {
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(2);
+  pooling_param->set_stride(1);
+  pooling_param->set_pad(0);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
+  Caffe::set_mode(Caffe::GPU);
+  this->blob_bottom_->Reshape(1, 1, 3, 3);
+
+  for (int i = 0; i < 3 * 3; ++i)
+  {
+    this->blob_bottom_->mutable_cpu_data()[i] = i + 1;
+  }
+  //with padding we get the following grid:
+  //123
+  //456
+  //789
+  PoolingLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 2);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  TypeParam epsilon = 1e-5;
+
+  double expected [4] = { 5, 6, 8, 9 }; 
+  for (int i = 0; i < 4; ++i)
+  {
+    EXPECT_NEAR(this->blob_top_->cpu_data()[i], expected[i], epsilon);
+  }
+}
+
+TYPED_TEST(PoolingLayerTest, TestCPUBackwardMax) {
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(2);
+  pooling_param->set_stride(1);
+  pooling_param->set_pad(0);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
+  Caffe::set_mode(Caffe::CPU);
+  this->blob_bottom_->Reshape(1, 1, 3, 3);
+
+  for (int i = 0; i < 3 * 3; ++i)
+  {
+    this->blob_bottom_->mutable_cpu_data()[i] = i + 1;
+  }
+  //with padding we get the following grid:
+  //123
+  //456
+  //789
+  PoolingLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 2);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  TypeParam epsilon = 1e-5;
+
+  for (int i = 0; i < 4; ++i) {
+    this->blob_top_->mutable_cpu_diff()[i] = i+1;
+  }
+  layer.Backward(this->blob_top_vec_, true, &(this->blob_bottom_vec_));
+  //we expect the bottom_diff to look like this:
+  //000
+  //012
+  //034
+
+  double expected [9] = { 0, 0, 0, 0, 1, 2, 0, 3, 4 }; 
+  for (int i = 0; i < 9; ++i)
+  {
+    EXPECT_NEAR(this->blob_bottom_->cpu_diff()[i], expected[i], epsilon);
+  }
+}
+
+
+TYPED_TEST(PoolingLayerTest, TestGPUBackwardMax) {
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(2);
+  pooling_param->set_stride(1);
+  pooling_param->set_pad(0);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_MAX);
+  Caffe::set_mode(Caffe::GPU);
+  this->blob_bottom_->Reshape(1, 1, 3, 3);
+
+  for (int i = 0; i < 3 * 3; ++i)
+  {
+    this->blob_bottom_->mutable_cpu_data()[i] = i + 1;
+  }
+  //with padding we get the following grid:
+  //123
+  //456
+  //789
+  PoolingLayer<TypeParam> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 2);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  TypeParam epsilon = 1e-5;
+
+  for (int i = 0; i < 4; ++i) {
+    this->blob_top_->mutable_cpu_diff()[i] = i + 1;
+  }
+  layer.Backward(this->blob_top_vec_, true, &(this->blob_bottom_vec_));
+  //we expect the bottom_diff to look like this:
+  //000
+  //012
+  //034
+
+  double expected [9] = { 0, 0, 0, 0, 1, 2, 0, 3, 4 }; 
+  for (int i = 0; i < 9; ++i)
+  {
+    EXPECT_NEAR(this->blob_bottom_->cpu_diff()[i], expected[i], epsilon);
+  }
 }
 
 

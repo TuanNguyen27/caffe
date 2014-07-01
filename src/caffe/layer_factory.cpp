@@ -36,6 +36,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new DeConvolutionLayer<Dtype>(param);
   case LayerParameter_LayerType_DATA:
     return new DataLayer<Dtype>(param);
+  case LayerParameter_LayerType_DATA_AUGMENTATION:
+    return new DataAugmentationLayer<Dtype>(param);
   case LayerParameter_LayerType_DROPOUT:
     return new DropoutLayer<Dtype>(param);
   case LayerParameter_LayerType_DUMMY_DATA:

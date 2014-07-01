@@ -5,9 +5,13 @@
 
 #include <string>
 #include <vector>
+#include <fstream>
 
 namespace caffe {
 
+template <typename Dtype>
+class TerminationCriterion;
+  
 template <typename Dtype>
 class Solver {
  public:
@@ -32,6 +36,8 @@ class Solver {
   // function that produces a SolverState protocol buffer that needs to be
   // written to disk together with the learned net.
   void Snapshot();
+  // if any of the criterions is met this is true
+  bool TerminationCriterionsMet();
   // The test routine
   void TestAll();
   void Test(const int test_net_id = 0);
@@ -46,6 +52,7 @@ class Solver {
   int iter_;
   shared_ptr<Net<Dtype> > net_;
   vector<shared_ptr<Net<Dtype> > > test_nets_;
+  vector<shared_ptr<TerminationCriterion<Dtype > > > termination_criterions_;
 
   DISABLE_COPY_AND_ASSIGN(Solver);
 };
@@ -71,6 +78,133 @@ class SGDSolver : public Solver<Dtype> {
   DISABLE_COPY_AND_ASSIGN(SGDSolver);
 };
 
+template <typename Dtype>
+class TerminationCriterion {
+public:
+  TerminationCriterion() : criterion_met_(false) {};
+  
+  virtual bool IsCriterionMet() {return criterion_met_;};
+
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy) = 0;
+
+  virtual void NotifyValidationLoss(Dtype loss) = 0;
+
+  virtual void NotifyIteration(int iteration) = 0;
+protected:
+  bool criterion_met_;
+};
+  
+template <typename Dtype>
+class MaxIterTerminationCriterion : public TerminationCriterion<Dtype> {
+public:
+  MaxIterTerminationCriterion(int max_iter) : max_iter_(max_iter) {};
+
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy) {};
+
+  virtual void NotifyValidationLoss(Dtype loss) {};
+  
+  virtual void NotifyIteration(int iteration);
+private:
+  int max_iter_;
+};
+
+template <typename Dtype>
+class DivergenceDetectionTerminationCriterion : public TerminationCriterion<Dtype> {
+  /**
+    Checks whether the training has diverged.
+  */
+public:
+  DivergenceDetectionTerminationCriterion() : initial_loss_set_(false){};
+  
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy);
+
+  virtual void NotifyValidationLoss(Dtype loss);
+  
+  virtual void NotifyIteration(int iteration) {};
+  
+private:
+  Dtype initial_loss_;
+  bool initial_loss_set_;
+};
+  
+template <typename Dtype>
+class TestAccuracyTerminationCriterion : public TerminationCriterion<Dtype> {
+public:
+  TestAccuracyTerminationCriterion(int test_accuracy_stop_countdown) :
+    test_accuracy_stop_countdown_(test_accuracy_stop_countdown),
+    count_down_(test_accuracy_stop_countdown),
+    best_accuracy_(0.) {};
+  
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy);
+
+  virtual void NotifyValidationLoss(Dtype loss) {};
+  
+  virtual void NotifyIteration(int iteration) {};
+  
+private:
+  const int test_accuracy_stop_countdown_;
+  Dtype best_accuracy_;
+  int count_down_;
+};
+
+template <typename Dtype>
+class ExternalTerminationCriterion : public TerminationCriterion<Dtype> {
+public:
+  ExternalTerminationCriterion(const std::string& cmd, int run_every_x_iterations);
+  
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy);
+
+  virtual void NotifyValidationLoss(Dtype loss) {};
+  
+  virtual void NotifyIteration(int iteration);
+  
+private:
+
+  void run();
+
+  //command to call to check the termination criterion.
+  std::string cmd_;
+  std::ofstream learning_curve_file_;
+  int run_every_x_iterations_;
+};
+
+
+template <typename Dtype>
+class ExternalRunInBackgroundTerminationCriterion : public TerminationCriterion<Dtype> {
+  /*
+    Termination criterion is run in background parallelly to the caffe process.
+    The status will be checked through files.
+
+    The usage protocol is the following:
+
+      1. Before the process is started a file called termination_criterion_running is created
+      2. The termination criterion is responsible for deleting termination_criterion_running
+         If this file is not deleted the termination criterion won't ever be run in the future!
+      3. When the termination criterion is completed it will delete the file termination_criterion_running
+         Furthermore the file y_predict.txt will be created in case the termination criterion is met.
+  */
+public:
+  ExternalRunInBackgroundTerminationCriterion(const std::string& cmd, int run_every_x_iterations);
+  
+  ~ExternalRunInBackgroundTerminationCriterion();
+
+  virtual void NotifyValidationAccuracy(Dtype test_accuracy);
+
+  virtual void NotifyValidationLoss(Dtype loss) {};
+  
+  virtual void NotifyIteration(int iteration);
+  
+private:
+
+  void run();
+
+  //command to call to check the termination criterion.
+  std::string cmd_;
+  std::ofstream learning_curve_file_;
+  int run_every_x_iterations_;
+  int iter_of_next_run_;
+};
+  
 
 }  // namespace caffe
 

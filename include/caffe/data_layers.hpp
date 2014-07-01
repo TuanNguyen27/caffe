@@ -63,7 +63,7 @@ template <typename Dtype>
 class HDF5DataLayer : public Layer<Dtype> {
  public:
   explicit HDF5DataLayer(const LayerParameter& param)
-      : Layer<Dtype>(param) {}
+      : Layer<Dtype>(param), data_in_memory_(true) {}
   virtual ~HDF5DataLayer();
   virtual void SetUp(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top);
@@ -83,14 +83,17 @@ class HDF5DataLayer : public Layer<Dtype> {
       const bool propagate_down, vector<Blob<Dtype>*>* bottom);
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const bool propagate_down, vector<Blob<Dtype>*>* bottom);
-  virtual void LoadHDF5FileData(const char* filename);
+  virtual void LoadHDF5FileData(const char* filename, Blob<Dtype>* data_blob, Blob<Dtype>* label_blob);
 
   std::vector<std::string> hdf_filenames_;
   unsigned int num_files_;
   unsigned int current_file_;
   hsize_t current_row_;
-  Blob<Dtype> data_blob_;
-  Blob<Dtype> label_blob_;
+  vector<Blob<Dtype>* > data_blobs_;
+  vector<Blob<Dtype>* > label_blobs_;
+  Blob<Dtype>* current_data_blob_;
+  Blob<Dtype>* current_label_blob_;
+  bool data_in_memory_;
 };
 
 // TODO: DataLayer, ImageDataLayer, and WindowDataLayer all have the

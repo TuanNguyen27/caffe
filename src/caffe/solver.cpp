@@ -1,6 +1,9 @@
 // Copyright 2014 BVLC and contributors.
 
 #include <cstdio>
+#include <ctime>
+#include <cstdlib>
+#include <cmath> 
 
 #include <algorithm>
 #include <string>
@@ -34,7 +37,7 @@ Solver<Dtype>::Solver(const string& param_file)
 template <typename Dtype>
 void Solver<Dtype>::Init(const SolverParameter& param) {
   LOG(INFO) << "Initializing solver from parameters: " << std::endl
-            << param.DebugString();
+            << param.DebugString(); 
   param_ = param;
   if (param_.solver_mode() == SolverParameter_SolverMode_GPU &&
       param_.has_device_id()) {
@@ -76,6 +79,47 @@ void Solver<Dtype>::Init(const SolverParameter& param) {
                 << ") from file: " << param.test_net(i);
       test_nets_[test_net_id].reset(new Net<Dtype>(param_.test_net(i)));
   }
+  CHECK_GT(this->param_.termination_criterion().size(), 0) << "at least one termination criterion needed.";
+  termination_criterions_.resize(this->param_.termination_criterion().size());
+  for(int i=0; i < this->param_.termination_criterion().size(); i++) {
+    if (this->param_.termination_criterion().Get(i) == SolverParameter::MAX_ITER) {
+      termination_criterions_[i].reset(new MaxIterTerminationCriterion<Dtype >(param_.max_iter()));
+    } else if (this->param_.termination_criterion().Get(i) == SolverParameter::TEST_ACCURACY) {
+      CHECK(num_test_nets) << "Test network needed for TEST_ACCURACY termination criterion.";
+      bool valid_net = false;
+      for (int test_net_id = 0; test_net_id < test_nets_.size(); ++test_net_id) {
+        if (test_nets_[test_net_id]->name() == "valid") {
+          valid_net = true;
+        }
+      }
+      CHECK(valid_net) << "Network with the name 'valid' needed for TEST_ACCURACY termination criterion.";
+      termination_criterions_[i].reset(new TestAccuracyTerminationCriterion<Dtype >(param_.test_accuracy_stop_countdown()));
+    } else if (this->param_.termination_criterion().Get(i) == SolverParameter::DIVERGENCE_DETECTION) {
+      CHECK(num_test_nets) << "Test network needed for DIVERGENCE_DETECTION termination criterion.";
+      bool valid_net = false;
+      for (int test_net_id = 0; test_net_id < test_nets_.size(); ++test_net_id) {
+        if (test_nets_[test_net_id]->name() == "valid") {
+          valid_net = true;
+        }
+      }
+      CHECK(valid_net) << "Network with the name 'valid' needed for DIVERGENCE_DETECTION termination criterion.";
+      termination_criterions_[i].reset(new DivergenceDetectionTerminationCriterion<Dtype >());
+    } else if (this->param_.termination_criterion().Get(i) == SolverParameter::EXTERNAL) {
+      CHECK(param_.has_external_term_criterion_cmd()) << "external_term_criterion_cmd needed";
+      CHECK(param_.has_external_term_criterion_num_iter()) << "external_term_criterion_num_iter needed";
+      termination_criterions_[i].reset(new ExternalTerminationCriterion<Dtype >(
+        param_.external_term_criterion_cmd(),
+        param_.external_term_criterion_num_iter()
+        ));
+    } else if (this->param_.termination_criterion().Get(i) == SolverParameter::EXTERNAL_IN_BACKGROUND) {
+      CHECK(param_.has_external_term_criterion_cmd()) << "external_term_criterion_cmd needed";
+      CHECK(param_.has_external_term_criterion_num_iter()) << "external_term_criterion_num_iter needed";
+      termination_criterions_[i].reset(new ExternalRunInBackgroundTerminationCriterion<Dtype >(
+        param_.external_term_criterion_cmd(),
+        param_.external_term_criterion_num_iter()
+        ));
+    }
+  }
   LOG(INFO) << "Solver scaffolding done.";
 }
 
@@ -102,7 +146,12 @@ void Solver<Dtype>::Solve(const char* resume_file) {
   // For a network that is trained by the solver, no bottom or top vecs
   // should be given, and we will just provide dummy vecs.
   vector<Blob<Dtype>*> bottom_vec;
-  while (iter_++ < param_.max_iter()) {
+  do {
+    iter_++;
+    for (int i=0; i < termination_criterions_.size(); i++) {
+      termination_criterions_[i]->NotifyIteration(iter_);
+    }
+
     Dtype loss = net_->ForwardBackward(bottom_vec);
     ComputeUpdateValue();
     net_->Update();
@@ -117,16 +166,29 @@ void Solver<Dtype>::Solve(const char* resume_file) {
     if (param_.snapshot() && iter_ % param_.snapshot() == 0) {
       Snapshot();
     }
+  } while (!TerminationCriterionsMet());
+  if (param_.snapshot_on_exit()) {
+    iter_--;
+    Snapshot();
   }
-  // After the optimization is done, always do a snapshot.
-  iter_--;
-  Snapshot();
   LOG(INFO) << "Optimization Done.";
 }
 
+template <typename Dtype>
+bool Solver<Dtype>::TerminationCriterionsMet() {
+  for (int i=0; i < termination_criterions_.size(); i++) {
+    if (termination_criterions_[i]->IsCriterionMet()) {
+      return true;
+    }
+  }
+  return false;
+}
 
 template <typename Dtype>
 void Solver<Dtype>::TestAll() {
+  time_t timer;
+  timer = time(NULL);
+  LOG(INFO) << "Test timestamp " << timer;
   for (int test_net_id = 0; test_net_id < test_nets_.size(); ++test_net_id) {
     Test(test_net_id);
   }
@@ -230,6 +292,7 @@ Dtype SGDSolver<Dtype>::GetLearningRate() {
   if (lr_policy == "fixed") {
     rate = this->param_.base_lr();
   } else if (lr_policy == "step") {
+    CHECK_GT(this->param_.stepsize(), 0) << "step size necessary.";
     int current_step = this->iter_ / this->param_.stepsize();
     rate = this->param_.base_lr() *
         pow(this->param_.gamma(), current_step);
@@ -239,6 +302,10 @@ Dtype SGDSolver<Dtype>::GetLearningRate() {
     rate = this->param_.base_lr() *
         pow(Dtype(1) + this->param_.gamma() * this->iter_,
             - this->param_.power());
+  } else if (lr_policy == "inv_bergstra_bengio") {
+    CHECK_GT(this->param_.stepsize(), 0) << "step size necessary.";
+    rate = (this->iter_ > this->param_.stepsize()) ? this->param_.base_lr() * Dtype(this->param_.stepsize()) / this->iter_
+      : this->param_.base_lr();
   } else {
     LOG(FATAL) << "Unknown learning rate policy: " << lr_policy;
   }
@@ -340,7 +407,159 @@ void SGDSolver<Dtype>::RestoreSolverState(const SolverState& state) {
   }
 }
 
+template <typename Dtype>
+void MaxIterTerminationCriterion<Dtype >::NotifyIteration(int iter) {
+  this->criterion_met_ = iter >= max_iter_;
+}
+
+template <typename Dtype>
+void DivergenceDetectionTerminationCriterion<Dtype >::NotifyValidationAccuracy(Dtype test_accuracy) {
+  if(!std::isfinite(test_accuracy)){
+    this->criterion_met_ = true;
+  }
+}
+
+template <typename Dtype>
+void DivergenceDetectionTerminationCriterion<Dtype >::NotifyValidationLoss(Dtype loss) {
+  if(!std::isfinite(loss)){
+    this->criterion_met_ = true;
+  } else {
+    if (!initial_loss_set_){
+      initial_loss_ = loss;
+      initial_loss_set_ = true;
+    } else {
+      //check whether the current loss is an order of magnitude bigger than the initial loss:
+      if(loss / initial_loss_ > 10) {
+        this->criterion_met_ = true;
+      }
+    }
+  }
+}
+  
+template <typename Dtype>
+void TestAccuracyTerminationCriterion<Dtype >::NotifyValidationAccuracy(Dtype test_accuracy) {
+  if (test_accuracy > best_accuracy_) {
+    //reset countdown
+    count_down_ = test_accuracy_stop_countdown_;
+    this->criterion_met_ = false;
+    best_accuracy_ = test_accuracy;
+  } else {
+    --count_down_;
+    if (count_down_ <= 0) {
+      this->criterion_met_ = true;
+    } else {
+      this->criterion_met_ = false;
+    }
+  }
+}
+
+template <typename Dtype>
+ExternalTerminationCriterion<Dtype >::ExternalTerminationCriterion(const std::string& cmd,
+    int run_every_x_iterations)
+ : cmd_(cmd),
+   run_every_x_iterations_(run_every_x_iterations),
+   learning_curve_file_("learning_curve.txt") {
+}
+
+template <typename Dtype>
+void ExternalTerminationCriterion<Dtype >::NotifyValidationAccuracy(Dtype test_accuracy) {
+  learning_curve_file_ << test_accuracy << std::endl;
+  learning_curve_file_.flush();
+}
+
+template <typename Dtype>
+void ExternalTerminationCriterion<Dtype >::NotifyIteration(int iter) {
+  if (iter % run_every_x_iterations_ == 0) {
+    run();
+  }
+}
+
+template <typename Dtype>
+void ExternalTerminationCriterion<Dtype >::run() {
+  int ret = system(cmd_.c_str());
+  if (ret) {
+    LOG(INFO) << "external termination criterion met.";
+    this->criterion_met_ = true;
+  } else {
+    this->criterion_met_ = false;
+  }
+}
+
+
+template <typename Dtype>
+ExternalRunInBackgroundTerminationCriterion<Dtype >::ExternalRunInBackgroundTerminationCriterion(const std::string& cmd,
+    int run_every_x_iterations)
+ : cmd_(cmd),
+   run_every_x_iterations_(run_every_x_iterations),
+   learning_curve_file_("learning_curve.txt"),
+   iter_of_next_run_(run_every_x_iterations) {
+    //add & character so that it's executed in the background
+    cmd_.append(" &");
+
+    //make sure y_predict.txt doesn't exist, because we will base the termination
+    //decision on the presence of that file later on.
+    if (std::ifstream("y_predict.txt")) {
+      remove("y_predict.txt");
+    }
+    if (std::ifstream("termination_criterion_running")) {
+      remove("termination_criterion_running");
+    }
+}
+
+template <typename Dtype>
+ExternalRunInBackgroundTerminationCriterion<Dtype >::~ExternalRunInBackgroundTerminationCriterion() {
+  if (std::ifstream("termination_criterion_running_pid")) {
+    LOG(INFO) << "aborting termination_criterion";
+    system("kill `cat termination_criterion_running_pid`");
+    remove("termination_criterion_running_pid");
+  }
+  if (std::ifstream("termination_criterion_running")) {
+    remove("termination_criterion_running");
+  }
+}
+
+template <typename Dtype>
+void ExternalRunInBackgroundTerminationCriterion<Dtype >::NotifyValidationAccuracy(Dtype test_accuracy) {
+  learning_curve_file_ << test_accuracy << std::endl;
+  learning_curve_file_.flush();
+}
+
+template <typename Dtype>
+void ExternalRunInBackgroundTerminationCriterion<Dtype >::NotifyIteration(int iter) {
+  //check if terminated, by checking the if the flag file exists.
+  if (std::ifstream("termination_criterion_running")) {
+      //wait for it to complete...
+  } else {
+    //by convention if y_predict.txt was created the termination criterion was reached.
+    if (std::ifstream("y_predict.txt")) {
+      this->criterion_met_ = true;
+    } else {
+      this->criterion_met_ = false;
+      if (iter >= iter_of_next_run_) {
+        run();
+        iter_of_next_run_ += run_every_x_iterations_;
+      }
+    }
+  }
+}
+
+template <typename Dtype>
+void ExternalRunInBackgroundTerminationCriterion<Dtype >::run() {
+  //create file that indicates the termination criterion is running right now
+  std::ofstream outfile ("termination_criterion_running");
+  outfile << "running" << std::endl;
+  outfile.close();
+
+  //kick off the termination criterion.
+  int result = system(cmd_.c_str());
+}
+
+
 INSTANTIATE_CLASS(Solver);
 INSTANTIATE_CLASS(SGDSolver);
+INSTANTIATE_CLASS(MaxIterTerminationCriterion);
+INSTANTIATE_CLASS(TestAccuracyTerminationCriterion);
+INSTANTIATE_CLASS(ExternalTerminationCriterion);
+INSTANTIATE_CLASS(ExternalRunInBackgroundTerminationCriterion);
 
 }  // namespace caffe
