@@ -18,6 +18,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <omp.h>
 
 using std::max;
 
@@ -167,8 +168,6 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = (*top)[0]->mutable_cpu_data(); 
   
-  int x, y, c, top_idx, bottom_idx, h_off, w_off;
-  float x1, y1, x2, y2;
   
   std::string write_augmented;
   if (aug.has_write_augmented())
@@ -176,31 +175,39 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   else
     write_augmented = std::string("");
   
-  bool do_spatial_transform, do_chromatic_transform;
   
-  //   We only do transformations during training.
-  if (Caffe::phase() != Caffe::TRAIN) {
-    do_spatial_transform   = false;
-    do_chromatic_transform = false;
-  }
   
-  Dtype angle = 0.;
-  Dtype zoom_coeff = 1.;
-  Dtype dx = 0.;
-  Dtype dy = 0.;
-  bool mirror = false;  
-  
-  Dtype lmult_pow_coeff = 1.;
-  Dtype lmult_mult_coeff = 1.;
-  Dtype lmult_add_coeff = 0.;  
-  Dtype pow_coeffs [3] = {1., 1., 1.};
-  Dtype mult_coeffs [3] = {1., 1., 1.};
-  Dtype add_coeffs [3] = {0., 0., 0.};  
-  Dtype pow_factor = 1.;
-  Dtype mult_factor = 1.;
-  Dtype add_factor = 1.;
-  
+#pragma omp parallel for
   for (int item_id = 0; item_id < num; ++item_id) {
+    
+    int x, y, c, top_idx, bottom_idx, h_off, w_off;
+    float x1, y1, x2, y2;
+    
+    bool do_spatial_transform, do_chromatic_transform;
+    
+    //   We only do transformations during training.
+    if (Caffe::phase() != Caffe::TRAIN) {
+      do_spatial_transform   = false;
+      do_chromatic_transform = false;
+    }
+    
+    Dtype angle = 0.;
+    Dtype zoom_coeff = 1.;
+    Dtype dx = 0.;
+    Dtype dy = 0.;
+    bool mirror = false;  
+    
+    Dtype lmult_pow_coeff = 1.;
+    Dtype lmult_mult_coeff = 1.;
+    Dtype lmult_add_coeff = 0.;  
+    Dtype pow_coeffs [3] = {1., 1., 1.};
+    Dtype mult_coeffs [3] = {1., 1., 1.};
+    Dtype add_coeffs [3] = {0., 0., 0.};  
+    Dtype pow_factor = 1.;
+    Dtype mult_factor = 1.;
+    Dtype add_factor = 1.;
+    
+    //LOG(INFO) <<  " === thread " << omp_get_thread_num() << "/" << omp_get_num_threads() << " === ";
     
     do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
     do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
