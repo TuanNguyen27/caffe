@@ -500,20 +500,23 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
               eig[c] = eig[c] * max_abs_eig[c]; 
             }
           }
-          if (do_lmult_pow)
-            l = pow(fabs(eig[0]), lmult_pow_coeff);
-          else
-            l = fabs(eig[0]);
-          if (do_lmult_add) {
-            l = l + lmult_add_coeff;
-            if (l < 0.)
-              l = 0.;
-          }
-          if (do_lmult_mult)
-            l = l * lmult_mult_coeff;
-          if ((do_lmult_pow || do_lmult_add || do_lmult_mult) && fabs(eig[0]) > 1e-5) {
-            for (c=channels-1; c>=0; c--) {
-              eig[c] = eig[c] / fabs(eig[0]) * l;
+          if ( max_abs_eig[0] > 1e-5 ) {
+            if (do_lmult_pow)
+              l = pow(fabs(eig[0]/max_abs_eig[0]), lmult_pow_coeff);
+            else
+              l = fabs(eig[0])/max_abs_eig[0];
+//             if (do_lmult_add) {
+//               l = l + lmult_add_coeff;
+//               if (l < 0.)
+//                 l = 0.;
+//             }
+            if (do_lmult_mult)
+              l = l * lmult_mult_coeff;
+            l = l*max_abs_eig[0];
+            if ((do_lmult_pow || do_lmult_add || do_lmult_mult) && fabs(eig[0]) > 1e-5) {
+              for (c=channels-1; c>=0; c--) {
+                eig[c] = eig[c] / fabs(eig[0]) * l;
+              }
             }
           }
           for (c=0; c<channels; c++) {
