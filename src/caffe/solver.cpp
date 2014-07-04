@@ -232,11 +232,19 @@ void Solver<Dtype>::Test(const int test_net_id) {
   }
   if (param_.test_compute_loss()) {
     loss /= param_.test_iter(test_net_id);
-    LOG(INFO) << "Test loss: " << loss;
+    LOG(INFO) << test_nets_[test_net_id]->name() << " test loss: " << loss;
   }
   for (int i = 0; i < test_score.size(); ++i) {
-    LOG(INFO) << "Test score #" << i << ": "
-        << test_score[i] / param_.test_iter(test_net_id);
+    LOG(INFO) << test_nets_[test_net_id]->name() << " test score #" << i << ": "
+        << test_score[i] / param_.test_iter().Get(test_net_id);
+  }
+  if (test_nets_[test_net_id]->name() == "valid") {
+    double valid_accuracy = test_score[0] / param_.test_iter().Get(test_net_id);
+    double valid_loss = test_score[1] / param_.test_iter().Get(test_net_id);
+    for (int i=0; i < termination_criterions_.size(); i++) {
+      termination_criterions_[i]->NotifyValidationAccuracy(valid_accuracy);
+      termination_criterions_[i]->NotifyValidationLoss(valid_loss);
+    }
   }
   Caffe::set_phase(Caffe::TRAIN);
 }
