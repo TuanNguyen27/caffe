@@ -18,6 +18,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <omp.h>
 
 using std::max;
 
@@ -59,6 +60,48 @@ Dtype caffe_rng_generate(const RandomGeneratorParameter param) {
     else
       tmp = 0;
     rand = static_cast<Dtype>(tmp);
+  }
+  else if (rand_type.compare("uniform_bernoulli") == 0) {
+    float tmp1;
+    int tmp2;
+    
+    if (param.spread() > 0.) 
+      caffe_rng_uniform(1, param.mean() - param.spread(), param.mean() + param.spread(), &tmp1);
+    else
+      tmp1 = param.mean();
+    
+    if (param.prob() > 0.)
+      caffe_rng_bernoulli(1, param.prob(), &tmp2);
+    else
+      tmp2 = 0;
+    
+    tmp1 = tmp1 * static_cast<float>(tmp2);
+    
+    if (param.exp())
+      tmp1 = exp(tmp1);
+    
+    rand = static_cast<Dtype>(tmp1);
+  }
+  else if (rand_type.compare("gaussian_bernoulli") == 0) {
+    float tmp1;
+    int tmp2;
+    
+    if (param.spread() > 0.) 
+      caffe_rng_gaussian(1, param.mean() - param.spread(), param.mean() + param.spread(), &tmp1);
+    else
+      tmp1 = param.mean();
+    
+    if (param.prob() > 0.)
+      caffe_rng_bernoulli(1, param.prob(), &tmp2);
+    else
+      tmp2 = 0;
+    
+    tmp1 = tmp1 * static_cast<float>(tmp2);
+    
+    if (param.exp())
+      tmp1 = exp(tmp1);
+    
+    rand = static_cast<Dtype>(tmp1);
   }
   else {
     LOG(ERROR) << "Unknown random type " << rand_type;
@@ -125,14 +168,6 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = (*top)[0]->mutable_cpu_data(); 
   
-  int x, y, c, top_idx;
-  float x1, y1, x2, y2;
-  
-  // We only do transformations during training.
-//   if (Caffe::phase() != Caffe::TRAIN) {
-//     do_spatial_transform   = false;
-//     do_chromatic_transform = false;
-//   }
   
   std::string write_augmented;
   if (aug.has_write_augmented())
@@ -140,55 +175,50 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   else
     write_augmented = std::string("");
   
-  bool do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
-  bool do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
+  
+  
+#pragma omp parallel for
+  for (int item_id = 0; item_id < num; ++item_id) {
+    
+    int x, y, c, top_idx, bottom_idx, h_off, w_off;
+    float x1, y1, x2, y2;
+    
+    bool do_spatial_transform, do_chromatic_transform;
+    
+    //   We only do transformations during training.
+    if (Caffe::phase() != Caffe::TRAIN) {
+      do_spatial_transform   = false;
+      do_chromatic_transform = false;
+    }
+    
+    Dtype angle = 0.;
+    Dtype zoom_coeff = 1.;
+    Dtype dx = 0.;
+    Dtype dy = 0.;
+    bool mirror = false;  
+    
+    Dtype lmult_pow_coeff = 1.;
+    Dtype lmult_mult_coeff = 1.;
+    Dtype lmult_add_coeff = 0.;  
+    Dtype pow_coeffs [3] = {1., 1., 1.};
+    Dtype mult_coeffs [3] = {1., 1., 1.};
+    Dtype add_coeffs [3] = {0., 0., 0.};  
+    Dtype pow_factor = 1.;
+    Dtype mult_factor = 1.;
+    Dtype add_factor = 1.;
+    
+    //LOG(INFO) <<  " === thread " << omp_get_thread_num() << "/" << omp_get_num_threads() << " === ";
+    
+    do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
+    do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
                                  aug.has_sat_pow()   || aug.has_sat_mult()   || aug.has_sat_add()   ||
                                  aug.has_col_pow()   || aug.has_col_mult()   || aug.has_col_add()   ||
                                  aug.has_ladd_pow()  || aug.has_ladd_mult()  || aug.has_ladd_add());
-  
-  Dtype angle = 0.;
-  Dtype zoom_coeff = 1.;
-  Dtype dx = 0.;
-  Dtype dy = 0.;
-  bool mirror = false;
-  
-  bool do_rotate = aug.has_rotate();
-  bool do_translate = aug.has_translate();
-  bool do_mirror = aug.has_mirror();
-  bool do_zoom = aug.has_zoom();
-  
-  Dtype lmult_pow_coeff = 1.;
-  Dtype lmult_mult_coeff = 1.;
-  Dtype lmult_add_coeff = 0.;  
-  Dtype pow_coeffs [3] = {1., 1., 1.};
-  Dtype mult_coeffs [3] = {1., 1., 1.};
-  Dtype add_coeffs [3] = {0., 0., 0.};  
-  Dtype pow_factor = 1.;
-  Dtype mult_factor = 1.;
-  Dtype add_factor = 1.;
-  
-  bool do_pow [3] = {false, false, false};
-  bool do_mult [3] = {false, false, false};
-  bool do_add [3] = {false, false, false};
-  bool do_lmult_pow = aug.has_lmult_pow();
-  bool do_lmult_add = aug.has_lmult_add();
-  bool do_lmult_mult = aug.has_lmult_mult();;
-  
-  for (c=0; c<3; c++) {
-    if (((c==1 || c==2) && (aug.has_sat_pow() || aug.has_col_pow())) || (c==0 && aug.has_ladd_pow()))
-      do_pow[c] = true;
-    if (((c==1 || c==2) && (aug.has_sat_add() || aug.has_col_add())) || (c==0 && aug.has_ladd_add()))
-      do_add[c] = true;
-    if (((c==1 || c==2) && (aug.has_sat_mult() || aug.has_col_mult())) || (c==0 && aug.has_ladd_mult()))
-      do_mult[c] = true;
-  }
-  
-  for (int item_id = 0; item_id < num; ++item_id) {
     
     // sample the parameters of the transoformations  
     if (do_spatial_transform) {
       int counter = 0;
-      int max_num_tries = 10;    
+      int max_num_tries = 20;    
       int good_params = 0;
       
       // try to sample parameters for which transformed image doesn't go outside the borders of the original one
@@ -206,6 +236,8 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
         if (aug.has_mirror())
           mirror = caffe_rng_generate<bool>(aug.mirror());
   
+        //LOG(INFO) << "angle: " << angle << ", zoom: " << zoom_coeff << ", dx: " << dx << ", dy: " << dy << ", mirror: " << mirror;
+        
         for (x = 0; x < crop_size; x += crop_size-1) {
           for (y = 0; y < crop_size; y += crop_size-1) {
             // move the origin and mirror
@@ -297,8 +329,59 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       }
     }
     
+    bool do_rotate = aug.has_rotate();
+    bool do_translate = aug.has_translate();
+    bool do_mirror = aug.has_mirror();
+    bool do_zoom = aug.has_zoom();
+    
+    if (do_rotate)
+      do_rotate = (fabs(angle) >1e-2);
+    if (do_translate)
+      do_translate = ( fabs(dx) > 1e-2 || fabs(dy) > 1e-2) ;
+    if (do_mirror)
+      do_mirror = mirror;
+    if (do_zoom)
+      do_zoom = (fabs(zoom_coeff - 1.) >1e-2);
+    
+    do_spatial_transform = (do_rotate || do_translate || do_mirror || do_zoom);
+    
+    bool do_pow [3] = {false, false, false};
+    bool do_mult [3] = {false, false, false};
+    bool do_add [3] = {false, false, false};
+    bool do_lmult_pow = aug.has_lmult_pow();
+    bool do_lmult_add = aug.has_lmult_add();
+    bool do_lmult_mult = aug.has_lmult_mult();;
+    
+    do_chromatic_transform = false;
+    
+    for (c=0; c<3; c++) {
+      if (((c==1 || c==2) && (aug.has_sat_pow() || aug.has_col_pow())) || (c==0 && aug.has_ladd_pow()))
+        do_pow[c] = true;
+      if (((c==1 || c==2) && (aug.has_sat_add() || aug.has_col_add())) || (c==0 && aug.has_ladd_add()))
+        do_add[c] = true;
+      if (((c==1 || c==2) && (aug.has_sat_mult() || aug.has_col_mult())) || (c==0 && aug.has_ladd_mult()))
+        do_mult[c] = true;
+      if (do_pow[c])
+        do_pow[c] = (fabs(pow_coeffs[c] - 1.) > 1e-2);
+      if (do_add[c])
+        do_add[c] = (fabs(add_coeffs[c]) > 1e-2);
+      if (do_mult[c])
+        do_mult[c] = (fabs(mult_coeffs[c] - 1.) > 1e-2);
+      do_chromatic_transform = (do_chromatic_transform || do_pow[c] || do_add[c] || do_mult[c]);
+    }
+    if (do_lmult_pow)
+      do_lmult_pow = (fabs(lmult_pow_coeff - 1.) > 1e-2);
+    if (do_lmult_add)
+      do_lmult_add = (fabs(lmult_add_coeff) > 1e-2);
+    if (do_lmult_mult)
+      do_lmult_mult = (fabs(lmult_mult_coeff - 1.) > 1e-2);
+    do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult);
+    
+//     LOG(INFO) << "item_id " << item_id << " do_translate " << do_translate << " do_rotate " << do_rotate << " do_zoom " << do_zoom;
+//     LOG(INFO) << "angle: " << angle << ", zoom: " << zoom_coeff << ", dx: " << dx << ", dy: " << dy << ", mirror: " << mirror;
     // actually apply the transformation
     if (do_spatial_transform) { 
+//       LOG(INFO) << " >>> do spatial transform " << item_id;
       int i00,i01,i10,i11;
       for (x = 0; x < crop_size; x++) {
         for (y = 0; y < crop_size; y++) {
@@ -335,7 +418,7 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
           y2 = y2 + .5 * static_cast<Dtype>(height);
           
 
-          for (c=0; c<channels; c++) {
+          for (c = 0; c < channels; c++) {
             top_idx = ((item_id*channels + c)*crop_size + x)*crop_size + y;
             if (floor(x2) < 0. || floor(x2) > static_cast<Dtype>(width - 2) || floor(y2) < 0. || floor(y2) > static_cast<Dtype>(height - 2))
               top_data[top_idx] = 0.;
@@ -363,9 +446,23 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
         }
       }
     }
+    else {
+      h_off = (height - crop_size)/2;
+      w_off = (width - crop_size)/2;
+      for (x = 0; x < crop_size; x++) {
+        for (y = 0; y < crop_size; y++) {
+          for (c = 0; c < channels; c++) {
+            top_idx = ((item_id*channels + c)*crop_size + x)*crop_size + y;
+            bottom_idx = ((item_id*channels + c)*width + x + w_off)*height + y + h_off;
+            top_data[top_idx] = bottom_data[bottom_idx];
+          }
+        }
+      }
+    }
     
     if (do_chromatic_transform) {
-      Dtype l, l1;
+//       LOG(INFO) << " >>> do chromatic transform " << item_id;
+      Dtype l;
       Dtype rgb [3];
       Dtype eig [3];
       Dtype max_abs_eig[3] = {0., 0., 0.};
@@ -403,18 +500,23 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
               eig[c] = eig[c] * max_abs_eig[c]; 
             }
           }
-          if (do_lmult_pow)
-            l = pow(fabs(eig[0]), lmult_pow_coeff);
-          if (do_lmult_add) {
-            l = l + lmult_add_coeff;
-            if (l < 0.)
-              l = 0.;
-          }
-          if (do_lmult_mult)
-            l = l * lmult_mult_coeff;
-          if ((do_lmult_pow || do_lmult_add || do_lmult_mult) && fabs(eig[0]) > 1e-5) {
-            for (c=channels-1; c>=0; c--) {
-              eig[c] = eig[c] / fabs(eig[0]) * l;
+          if ( max_abs_eig[0] > 1e-5 ) {
+            if (do_lmult_pow)
+              l = pow(fabs(eig[0]/max_abs_eig[0]), lmult_pow_coeff);
+            else
+              l = fabs(eig[0])/max_abs_eig[0];
+//             if (do_lmult_add) {
+//               l = l + lmult_add_coeff;
+//               if (l < 0.)
+//                 l = 0.;
+//             }
+            if (do_lmult_mult)
+              l = l * lmult_mult_coeff;
+            l = l*max_abs_eig[0];
+            if ((do_lmult_pow || do_lmult_add || do_lmult_mult) && fabs(eig[0]) > 1e-5) {
+              for (c=channels-1; c>=0; c--) {
+                eig[c] = eig[c] / fabs(eig[0]) * l;
+              }
             }
           }
           for (c=0; c<channels; c++) {

@@ -152,6 +152,7 @@ message LayerParameter {
     CONVOLUTION = 4;
     DATA = 5;
     DATA_AUGMENTATION = 36;
+    DATA_LOAD_AND_AUGMENT = 37;
     DROPOUT = 6;
     DUMMY_DATA = 32;
     EUCLIDEAN_LOSS = 7;
