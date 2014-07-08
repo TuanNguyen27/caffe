@@ -100,6 +100,7 @@ class ConvolutionLayer : public Layer<Dtype> {
   virtual inline LayerParameter_LayerType type() const {
     return LayerParameter_LayerType_CONVOLUTION;
   }
+  virtual void normalize_weights(Dtype mnorm);
   virtual inline int ExactNumBottomBlobs() const { return 1; }
   virtual inline int ExactNumTopBlobs() const { return 1; }
 
@@ -308,6 +309,7 @@ class InnerProductLayer : public Layer<Dtype> {
   virtual inline LayerParameter_LayerType type() const {
     return LayerParameter_LayerType_INNER_PRODUCT;
   }
+  virtual void normalize_weights(Dtype mnorm);
   virtual inline int ExactNumBottomBlobs() const { return 1; }
   virtual inline int ExactNumTopBlobs() const { return 1; }
 

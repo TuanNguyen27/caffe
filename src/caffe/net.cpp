@@ -237,6 +237,8 @@ void Net<Dtype>::GetLearningRateAndWeightDecay() {
         params_weight_decay_.push_back(1.);
       }
     }
+    // push the weight constraints
+    params_weight_constraint_.push_back(layers_[i]->layer_param().max_weight_norm());
   }
 }
 

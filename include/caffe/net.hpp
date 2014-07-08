@@ -86,6 +86,7 @@ class Net {
   // returns the parameter learning rate multipliers
   inline vector<float>& params_lr() {return params_lr_; }
   inline vector<float>& params_weight_decay() { return params_weight_decay_; }
+  inline vector<float>& params_weight_constraint() { return params_weight_constraint_; }
   // Input and output blob numbers
   inline int num_inputs() { return net_input_blobs_.size(); }
   inline int num_outputs() { return net_output_blobs_.size(); }
@@ -146,6 +147,7 @@ class Net {
   vector<float> params_lr_;
   // the weight decay multipliers
   vector<float> params_weight_decay_;
+  vector<float> params_weight_constraint_;
   // The bytes of memory used by this net
   size_t memory_used_;
   DISABLE_COPY_AND_ASSIGN(Net);

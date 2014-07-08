@@ -162,6 +162,45 @@ void ConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
   }
 }
 
+template <typename Dtype>
+void ConvolutionLayer<Dtype>::normalize_weights(Dtype mnorm) {
+  Dtype *weight = 0;
+  int M = this->blobs_[0]->channels() * this->blobs_[0]->width() * this->blobs_[0]->height();
+  int N = this->blobs_[0]->num();
+  int off = this->blobs_[0]->offset(1, 0, 0, 0);
+  switch (Caffe::mode()) {
+  case Caffe::CPU:
+      // apply the constraint to each column
+      weight = this->blobs_[0]->mutable_cpu_data();
+      for (int i = 0; i < N; ++i) {
+          // compute l2 norm
+          Dtype nrm = caffe_cpu_norm2(M, weight, 1);
+          if (nrm > mnorm) {
+              // and scale
+              caffe_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, 1);
+          }
+          weight += off;
+      }
+      break;
+  case Caffe::GPU:
+      // apply the constraint to each column
+      weight = this->blobs_[0]->mutable_gpu_data();
+      for (int i = 0; i < N; ++i) {
+          // compute l2 norm
+          Dtype nrm = caffe_gpu_norm2(M, weight, 1);
+          if (nrm > mnorm) {
+              // and scale
+              caffe_gpu_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, 1);
+          }
+          weight += off;
+      }
+    break;
+  default:
+    LOG(FATAL) << "Unknown caffe mode.";
+    break;
+  }
+}
+
 INSTANTIATE_CLASS(ConvolutionLayer);
 
 }  // namespace caffe
