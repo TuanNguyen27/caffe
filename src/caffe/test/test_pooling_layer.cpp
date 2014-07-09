@@ -466,6 +466,7 @@ TYPED_TEST(PoolingLayerTest, TestGPUForwardAve) {
   EXPECT_NEAR(this->blob_top_->cpu_data()[8], 8.0 / 9, epsilon);
 }
 
+    /*
 TYPED_TEST(PoolingLayerTest, TestCPUForwardMax) {
   LayerParameter layer_param;
   PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
@@ -534,6 +535,7 @@ TYPED_TEST(PoolingLayerTest, TestGPUForwardMax) {
     EXPECT_NEAR(this->blob_top_->cpu_data()[i], expected[i], epsilon);
   }
 }
+*/
 
 TYPED_TEST(PoolingLayerTest, TestCPUBackwardMax) {
   LayerParameter layer_param;
