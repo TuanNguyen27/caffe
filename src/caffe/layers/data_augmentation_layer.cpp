@@ -187,36 +187,67 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     
     bool do_spatial_transform, do_chromatic_transform;
     
+    bool do_rotate = aug.has_rotate();
+    bool do_translate = aug.has_translate();
+    bool do_mirror = aug.has_mirror();
+    bool do_zoom = aug.has_zoom();
+    
+    bool do_pow [3] = {false, false, false};
+    bool do_mult [3] = {false, false, false};
+    bool do_add [3] = {false, false, false};
+    bool do_lmult_pow = aug.has_lmult_pow();
+    bool do_lmult_add = aug.has_lmult_add();
+    bool do_lmult_mult = aug.has_lmult_mult();
+    bool do_col_rotate = aug.has_col_rotate();
+    
+    Dtype angle;
+    Dtype zoom_coeff;
+    Dtype dx;
+    Dtype dy;
+    bool mirror;  
+    
+    Dtype lmult_pow_coeff;
+    Dtype lmult_mult_coeff;
+    Dtype lmult_add_coeff;  
+    Dtype pow_coeffs [3];
+    Dtype mult_coeffs [3];
+    Dtype add_coeffs [3];  
+    Dtype pow_factor;
+    Dtype mult_factor;
+    Dtype add_factor;
+    Dtype col_angle;
+    
     //   We only do transformations during training.
     if (!train_phase) {
       do_spatial_transform   = false;
       do_chromatic_transform = false;
     }
     else {
-      do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
-      do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
+      do_spatial_transform   = (do_mirror           || do_translate         || do_rotate           || do_zoom);
+      do_chromatic_transform = (do_lmult_pow        || do_lmult_mult        || do_lmult_add        || 
                                 aug.has_sat_pow()   || aug.has_sat_mult()   || aug.has_sat_add()   ||
                                 aug.has_col_pow()   || aug.has_col_mult()   || aug.has_col_add()   ||
-                                aug.has_ladd_pow()  || aug.has_ladd_mult()  || aug.has_ladd_add()  || aug.has_col_rotate());
+                                aug.has_ladd_pow()  || aug.has_ladd_mult()  || aug.has_ladd_add()  || do_col_rotate);
+      angle = 0.;
+      zoom_coeff = 1.;
+      dx = 0.;
+      dy = 0.;
+      mirror = false;  
+      
+      lmult_pow_coeff = 1.;
+      lmult_mult_coeff = 1.;
+      lmult_add_coeff = 0.;  
+      pow_coeffs[0] = 1.;  pow_coeffs[1] = 1.;  pow_coeffs[2] = 1.; 
+      mult_coeffs[0] = 1.; mult_coeffs[1] = 1.; mult_coeffs[2] = 1.; 
+      add_coeffs[0] = 0.;  add_coeffs[1] = 0.;  add_coeffs[2] = 0.;   
+      pow_factor = 1.;
+      mult_factor = 1.;
+      add_factor = 1.;
+      col_angle = 0.;
     }
       
     
-    Dtype angle = 0.;
-    Dtype zoom_coeff = 1.;
-    Dtype dx = 0.;
-    Dtype dy = 0.;
-    bool mirror = false;  
-    
-    Dtype lmult_pow_coeff = 1.;
-    Dtype lmult_mult_coeff = 1.;
-    Dtype lmult_add_coeff = 0.;  
-    Dtype pow_coeffs [3] = {1., 1., 1.};
-    Dtype mult_coeffs [3] = {1., 1., 1.};
-    Dtype add_coeffs [3] = {0., 0., 0.};  
-    Dtype pow_factor = 1.;
-    Dtype mult_factor = 1.;
-    Dtype add_factor = 1.;
-    Dtype col_angle = 0.;
+
     
     //LOG(INFO) <<  " === thread " << omp_get_thread_num() << "/" << omp_get_num_threads() << " === ";
     
@@ -290,7 +321,18 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
           LOG(INFO) << " Augmenting. angle: " << angle << ", zoom: " << zoom_coeff << ", dx: " << dx << ", dy: " << dy << ", mirror: " << mirror;
         else
           LOG(INFO) << "Couldn't find appropriate spatial augmentation parameters";
-      }
+      }  
+      
+      if (do_rotate)
+        do_rotate = (fabs(angle) >1e-2);
+      if (do_translate)
+        do_translate = ( fabs(dx) > 1e-2 || fabs(dy) > 1e-2) ;
+      if (do_mirror)
+        do_mirror = mirror;
+      if (do_zoom)
+        do_zoom = (fabs(zoom_coeff - 1.) >1e-2);
+      
+      do_spatial_transform = (do_rotate || do_translate || do_mirror || do_zoom);
     } 
     
     if (do_chromatic_transform) {
@@ -337,58 +379,35 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       if (write_augmented.size()) {
         LOG(INFO) << "Augmenting. lmult_pow: " << lmult_pow_coeff << ", lmult_mult: " << lmult_mult_coeff << ", lmult_add: " << lmult_add_coeff;      
       }
-    }
+      
+      do_chromatic_transform = false;
     
-    bool do_rotate = aug.has_rotate();
-    bool do_translate = aug.has_translate();
-    bool do_mirror = aug.has_mirror();
-    bool do_zoom = aug.has_zoom();
+      for (c=0; c<3; c++) {
+        if (((c==1 || c==2) && (aug.has_sat_pow() || aug.has_col_pow())) || (c==0 && aug.has_ladd_pow()))
+          do_pow[c] = true;
+        if (((c==1 || c==2) && (aug.has_sat_add() || aug.has_col_add())) || (c==0 && aug.has_ladd_add()))
+          do_add[c] = true;
+        if (((c==1 || c==2) && (aug.has_sat_mult() || aug.has_col_mult())) || (c==0 && aug.has_ladd_mult()))
+          do_mult[c] = true;
+        if (do_pow[c])
+          do_pow[c] = (fabs(pow_coeffs[c] - 1.) > 1e-2);
+        if (do_add[c])
+          do_add[c] = (fabs(add_coeffs[c]) > 1e-2);
+        if (do_mult[c])
+          do_mult[c] = (fabs(mult_coeffs[c] - 1.) > 1e-2);
+        do_chromatic_transform = (do_chromatic_transform || do_pow[c] || do_add[c] || do_mult[c]);
+      }
+      if (do_lmult_pow)
+        do_lmult_pow = (fabs(lmult_pow_coeff - 1.) > 1e-2);
+      if (do_lmult_add)
+        do_lmult_add = (fabs(lmult_add_coeff) > 1e-2);
+      if (do_lmult_mult)
+        do_lmult_mult = (fabs(lmult_mult_coeff - 1.) > 1e-2);
+      if (do_col_rotate)
+        do_col_rotate = (fabs(col_angle) > 1e-2);
+      do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult || do_col_rotate);
+    }      
     
-    if (do_rotate)
-      do_rotate = (fabs(angle) >1e-2);
-    if (do_translate)
-      do_translate = ( fabs(dx) > 1e-2 || fabs(dy) > 1e-2) ;
-    if (do_mirror)
-      do_mirror = mirror;
-    if (do_zoom)
-      do_zoom = (fabs(zoom_coeff - 1.) >1e-2);
-    
-    do_spatial_transform = (do_rotate || do_translate || do_mirror || do_zoom);
-    
-    bool do_pow [3] = {false, false, false};
-    bool do_mult [3] = {false, false, false};
-    bool do_add [3] = {false, false, false};
-    bool do_lmult_pow = aug.has_lmult_pow();
-    bool do_lmult_add = aug.has_lmult_add();
-    bool do_lmult_mult = aug.has_lmult_mult();
-    bool do_col_rotate = aug.has_col_rotate();
-    
-    do_chromatic_transform = false;
-    
-    for (c=0; c<3; c++) {
-      if (((c==1 || c==2) && (aug.has_sat_pow() || aug.has_col_pow())) || (c==0 && aug.has_ladd_pow()))
-        do_pow[c] = true;
-      if (((c==1 || c==2) && (aug.has_sat_add() || aug.has_col_add())) || (c==0 && aug.has_ladd_add()))
-        do_add[c] = true;
-      if (((c==1 || c==2) && (aug.has_sat_mult() || aug.has_col_mult())) || (c==0 && aug.has_ladd_mult()))
-        do_mult[c] = true;
-      if (do_pow[c])
-        do_pow[c] = (fabs(pow_coeffs[c] - 1.) > 1e-2);
-      if (do_add[c])
-        do_add[c] = (fabs(add_coeffs[c]) > 1e-2);
-      if (do_mult[c])
-        do_mult[c] = (fabs(mult_coeffs[c] - 1.) > 1e-2);
-      do_chromatic_transform = (do_chromatic_transform || do_pow[c] || do_add[c] || do_mult[c]);
-    }
-    if (do_lmult_pow)
-      do_lmult_pow = (fabs(lmult_pow_coeff - 1.) > 1e-2);
-    if (do_lmult_add)
-      do_lmult_add = (fabs(lmult_add_coeff) > 1e-2);
-    if (do_lmult_mult)
-      do_lmult_mult = (fabs(lmult_mult_coeff - 1.) > 1e-2);
-    if (do_col_rotate)
-      do_col_rotate = (fabs(col_angle) > 1e-2);
-    do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult || do_col_rotate);
     
 //     LOG(INFO) << "item_id " << item_id << " do_translate " << do_translate << " do_rotate " << do_rotate << " do_zoom " << do_zoom;
 //     LOG(INFO) << "angle: " << angle << ", zoom: " << zoom_coeff << ", dx: " << dx << ", dy: " << dy << ", mirror: " << mirror;
@@ -568,8 +587,8 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       out_file.write(reinterpret_cast<char*>(&imsize[0]), 4*4);
       out_file.write(reinterpret_cast<const char*>(top_data), imsize[0]*imsize[1]*imsize[2]*imsize[3]*sizeof(float));
       out_file.close();
-      LOG(INFO) << " finished augmenting a batch === PAUSED === ";
-      std::cout << " finished augmenting a batch === PAUSED === ";
+      LOG(INFO) << " finished augmenting a batch. train=" << train_phase << " === PAUSED === ";
+      std::cout << " finished augmenting a batch. train=" << train_phase << " === PAUSED === ";
       std::cin.get();
     }
     else
