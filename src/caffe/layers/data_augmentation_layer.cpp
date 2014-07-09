@@ -177,7 +177,7 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   
   
   bool train_phase = (Caffe::phase() == Caffe::TRAIN);
-  LOG(INFO) <<  " === train_phase " << train_phase;
+  //LOG(INFO) <<  " === train_phase " << train_phase;
   
 #pragma omp parallel for firstprivate(aug, train_phase, write_augmented)
   for (int item_id = 0; item_id < num; ++item_id) {
