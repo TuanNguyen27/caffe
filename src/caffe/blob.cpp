@@ -32,6 +32,20 @@ void Blob<Dtype>::Reshape(const int num, const int channels, const int height,
 }
 
 template <typename Dtype>
+void Blob<Dtype>::Reshape_keepdata(const int num, const int channels, const int height,
+    const int width) {
+  CHECK_GE(num, 0);
+  CHECK_GE(channels, 0);
+  CHECK_GE(height, 0);
+  CHECK_GE(width, 0);
+  num_ = num;
+  channels_ = channels;
+  height_ = height;
+  width_ = width;
+  count_ = num_ * channels_ * height_ * width_;
+}
+
+template <typename Dtype>
 void Blob<Dtype>::ReshapeLike(const Blob<Dtype>& other) {
   Reshape(other.num(), other.channels(), other.height(), other.width());
 }

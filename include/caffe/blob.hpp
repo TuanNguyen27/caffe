@@ -19,6 +19,8 @@ class Blob {
     const int width);
   void Reshape(const int num, const int channels, const int height,
     const int width);
+  void Reshape_keepdata(const int num, const int channels, const int height,
+    const int width);
   void ReshapeLike(const Blob& other);
   inline int num() const { return num_; }
   inline int channels() const { return channels_; }

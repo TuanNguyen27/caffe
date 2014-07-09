@@ -127,22 +127,31 @@ void* DataLayerPrefetch(void* layer_pointer) {
       //}
     }
     // go to the next iter
+    int num_skip;
+    if (layer->layer_param_.data_param().randomize_data_sampling() <= 1)
+      num_skip = 1;
+    else
+      num_skip = (layer->PrefetchRand()) % (layer->layer_param_.data_param().randomize_data_sampling()) + 1;
     switch (layer->layer_param_.data_param().backend()) {
     case DataParameter_DB_LEVELDB:
-      layer->iter_->Next();
-      if (!layer->iter_->Valid()) {
-        // We have reached the end. Restart from the first.
-        DLOG(INFO) << "Restarting data prefetching from start.";
-        layer->iter_->SeekToFirst();
+      for (int s=0; s<num_skip; s++) {
+        layer->iter_->Next();
+        if (!layer->iter_->Valid()) {
+          // We have reached the end. Restart from the first.
+          DLOG(INFO) << "Restarting data prefetching from start.";
+          layer->iter_->SeekToFirst();
+        }
       }
       break;
     case DataParameter_DB_LMDB:
-      if (mdb_cursor_get(layer->mdb_cursor_, &layer->mdb_key_,
-              &layer->mdb_value_, MDB_NEXT) != MDB_SUCCESS) {
-        // We have reached the end. Restart from the first.
-        DLOG(INFO) << "Restarting data prefetching from start.";
-        CHECK_EQ(mdb_cursor_get(layer->mdb_cursor_, &layer->mdb_key_,
-                &layer->mdb_value_, MDB_FIRST), MDB_SUCCESS);
+      for (int s=0; s<num_skip; s++) {
+        if (mdb_cursor_get(layer->mdb_cursor_, &layer->mdb_key_,
+                &layer->mdb_value_, MDB_NEXT) != MDB_SUCCESS) {
+          // We have reached the end. Restart from the first.
+          DLOG(INFO) << "Restarting data prefetching from start.";
+          CHECK_EQ(mdb_cursor_get(layer->mdb_cursor_, &layer->mdb_key_,
+                  &layer->mdb_value_, MDB_FIRST), MDB_SUCCESS);
+        }
       }
       break;
     default:
@@ -323,7 +332,8 @@ void DataLayer<Dtype>::CreatePrefetchThread() {
   phase_ = Caffe::phase();
   const bool prefetch_needs_rand = (phase_ == Caffe::TRAIN) &&
       (this->layer_param_.data_param().mirror() ||
-       this->layer_param_.data_param().crop_size());
+       this->layer_param_.data_param().crop_size() ||
+      (this->layer_param_.data_param().randomize_data_sampling() >= 2)); 
   if (prefetch_needs_rand) {
     const unsigned int prefetch_rng_seed = caffe_rng_rand();
     prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));

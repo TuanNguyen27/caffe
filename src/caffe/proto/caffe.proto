@@ -248,7 +248,8 @@ message AugmentationParameter {
   optional RandomGeneratorParameter col_add = 28 ;
   optional RandomGeneratorParameter ladd_pow = 29 ;
   optional RandomGeneratorParameter ladd_mult = 30 ;
-  optional RandomGeneratorParameter ladd_add = 31 ;  
+  optional RandomGeneratorParameter ladd_add = 31 ; 
+  optional RandomGeneratorParameter col_rotate = 32 ; 
 }
 
 // Message that stores parameters used by ConcatLayer
@@ -312,6 +313,8 @@ message DataParameter {
   // be larger than the number of keys in the leveldb.
   optional uint32 rand_skip = 7 [default = 0];
   optional DB backend = 8 [default = LEVELDB];
+  // Specify if we want to skip a random number of samples (between 1 and randomize_data_sampling) at each step of loading data 
+  optional uint32 randomize_data_sampling = 10 [default = 0];
 }
 
 // Message that stores parameters used by DropoutLayer

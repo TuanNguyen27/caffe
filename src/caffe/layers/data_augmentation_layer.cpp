@@ -87,7 +87,7 @@ Dtype caffe_rng_generate(const RandomGeneratorParameter param) {
     int tmp2;
     
     if (param.spread() > 0.) 
-      caffe_rng_gaussian(1, param.mean() - param.spread(), param.mean() + param.spread(), &tmp1);
+      caffe_rng_gaussian(1, param.mean(), param.spread(), &tmp1);
     else
       tmp1 = param.mean();
     
@@ -176,8 +176,10 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     write_augmented = std::string("");
   
   
+  bool train_phase = (Caffe::phase() == Caffe::TRAIN);
+  LOG(INFO) <<  " === train_phase " << train_phase;
   
-#pragma omp parallel for
+#pragma omp parallel for firstprivate(aug, train_phase, write_augmented)
   for (int item_id = 0; item_id < num; ++item_id) {
     
     int x, y, c, top_idx, bottom_idx, h_off, w_off;
@@ -186,10 +188,18 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     bool do_spatial_transform, do_chromatic_transform;
     
     //   We only do transformations during training.
-    if (Caffe::phase() != Caffe::TRAIN) {
+    if (!train_phase) {
       do_spatial_transform   = false;
       do_chromatic_transform = false;
     }
+    else {
+      do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
+      do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
+                                aug.has_sat_pow()   || aug.has_sat_mult()   || aug.has_sat_add()   ||
+                                aug.has_col_pow()   || aug.has_col_mult()   || aug.has_col_add()   ||
+                                aug.has_ladd_pow()  || aug.has_ladd_mult()  || aug.has_ladd_add()  || aug.has_col_rotate());
+    }
+      
     
     Dtype angle = 0.;
     Dtype zoom_coeff = 1.;
@@ -206,14 +216,11 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     Dtype pow_factor = 1.;
     Dtype mult_factor = 1.;
     Dtype add_factor = 1.;
+    Dtype col_angle = 0.;
     
     //LOG(INFO) <<  " === thread " << omp_get_thread_num() << "/" << omp_get_num_threads() << " === ";
     
-    do_spatial_transform   = (aug.has_mirror()    || aug.has_translate()  || aug.has_rotate()    || aug.has_zoom());
-    do_chromatic_transform = (aug.has_lmult_pow() || aug.has_lmult_mult() || aug.has_lmult_add() || 
-                                 aug.has_sat_pow()   || aug.has_sat_mult()   || aug.has_sat_add()   ||
-                                 aug.has_col_pow()   || aug.has_col_mult()   || aug.has_col_add()   ||
-                                 aug.has_ladd_pow()  || aug.has_ladd_mult()  || aug.has_ladd_add());
+
     
     // sample the parameters of the transoformations  
     if (do_spatial_transform) {
@@ -317,6 +324,9 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       if (aug.has_col_add())
         add_factor = caffe_rng_generate<float>(aug.col_add());
       
+      if (aug.has_col_rotate())
+        col_angle = caffe_rng_generate<float>(aug.col_rotate());
+      
       pow_coeffs[1] = pow_coeffs[1] * pow_factor;
       pow_coeffs[2] = pow_coeffs[2] / pow_factor;
       mult_coeffs[1] = mult_coeffs[1] * mult_factor;
@@ -350,7 +360,8 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     bool do_add [3] = {false, false, false};
     bool do_lmult_pow = aug.has_lmult_pow();
     bool do_lmult_add = aug.has_lmult_add();
-    bool do_lmult_mult = aug.has_lmult_mult();;
+    bool do_lmult_mult = aug.has_lmult_mult();
+    bool do_col_rotate = aug.has_col_rotate();
     
     do_chromatic_transform = false;
     
@@ -375,7 +386,9 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       do_lmult_add = (fabs(lmult_add_coeff) > 1e-2);
     if (do_lmult_mult)
       do_lmult_mult = (fabs(lmult_mult_coeff - 1.) > 1e-2);
-    do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult);
+    if (do_col_rotate)
+      do_col_rotate = (fabs(col_angle) > 1e-2);
+    do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult || do_col_rotate);
     
 //     LOG(INFO) << "item_id " << item_id << " do_translate " << do_translate << " do_rotate " << do_rotate << " do_zoom " << do_zoom;
 //     LOG(INFO) << "angle: " << angle << ", zoom: " << zoom_coeff << ", dx: " << dx << ", dy: " << dy << ", mirror: " << mirror;
@@ -468,6 +481,7 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       Dtype max_abs_eig[3] = {0., 0., 0.};
       Dtype max_abs_rgb[3] = {0., 0., 0.};
       const Dtype eigvec [9] = {0.5579, 0.5859, 0.5878, 0.8021, -0.1989, -0.5631, -0.2130, 0.7856, -0.5809};
+//       const Dtype eigvec [9] = {0.5878, 0.5859, 0.5579, -0.5631, -0.1989, 0.8021, -0.5809, 0.7856, -0.2130};
       // compute max abs values of eigs (projections onto color space eigenvectors)
       for (x=0; x<crop_size; x++) {
         for (y=0; y<crop_size; y++) {
@@ -497,6 +511,14 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
                 eig[c] = eig[c] + add_coeffs[c];
               if (do_mult[c])
                 eig[c] = eig[c] * mult_coeffs[c];
+            }
+          }
+          if (do_col_rotate) {
+            eig[1] =  cos(col_angle) * eig[1] - sin(col_angle) * eig[2];
+            eig[2] =  sin(col_angle) * eig[1] + cos(col_angle) * eig[2];          
+          }
+          for (c=0; c<channels; c++) {
+            if ( max_abs_eig[c] > 1e-5 ) {
               eig[c] = eig[c] * max_abs_eig[c]; 
             }
           }
