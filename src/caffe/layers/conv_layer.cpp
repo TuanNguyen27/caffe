@@ -177,7 +177,7 @@ void ConvolutionLayer<Dtype>::normalize_weights(Dtype mnorm) {
           Dtype nrm = caffe_cpu_norm2(M, weight, 1);
           if (nrm > mnorm) {
               // and scale
-              caffe_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, 1);
+              caffe_scal(M, mnorm / (nrm + Dtype(1e-7)), weight, 1);
           }
           weight += off;
       }
@@ -190,7 +190,7 @@ void ConvolutionLayer<Dtype>::normalize_weights(Dtype mnorm) {
           Dtype nrm = caffe_gpu_norm2(M, weight, 1);
           if (nrm > mnorm) {
               // and scale
-              caffe_gpu_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, 1);
+              caffe_gpu_scal(M, mnorm / (nrm + Dtype(1e-7)), weight, 1);
           }
           weight += off;
       }

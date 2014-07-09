@@ -110,7 +110,7 @@ void InnerProductLayer<Dtype>::normalize_weights(Dtype mnorm) {
           Dtype nrm = caffe_cpu_norm2(M, weight, N);
           if (nrm > mnorm) {
               // and scale
-              caffe_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, N);
+              caffe_scal(M, mnorm / (nrm + Dtype(1e-7)), weight, N);
           }
           weight += off;
       }
@@ -123,7 +123,7 @@ void InnerProductLayer<Dtype>::normalize_weights(Dtype mnorm) {
           Dtype nrm = caffe_gpu_norm2(M, weight, N);
           if (nrm > mnorm) {
               // and scale
-              caffe_gpu_scal(M, Dtype(1) / (nrm + Dtype(1e-7)), weight, N);
+              caffe_gpu_scal(M, mnorm / (nrm + Dtype(1e-7)), weight, N);
           }
           weight += off;
       }
