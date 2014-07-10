@@ -338,8 +338,10 @@ void SGDSolver<Dtype>::PreSolve() {
 template <typename Dtype>
 void SGDSolver<Dtype>::ComputeUpdateValue() {
   vector<shared_ptr<Blob<Dtype> > >& net_params = this->net_->params();
+  const vector<shared_ptr<Layer<Dtype> > >& net_layers = this->net_->layers();
   vector<float>& net_params_lr = this->net_->params_lr();
   vector<float>& net_params_weight_decay = this->net_->params_weight_decay();
+  vector<float>& net_params_weight_constraint = this->net_->params_weight_constraint();
   // get the learning rate
   Dtype rate = GetLearningRate();
   if (this->param_.display() && this->iter_ % this->param_.display() == 0) {
@@ -347,12 +349,14 @@ void SGDSolver<Dtype>::ComputeUpdateValue() {
   }
   Dtype momentum = this->param_.momentum();
   Dtype weight_decay = this->param_.weight_decay();
+  bool constrain_weights = this->param_.weight_constraint();
   switch (Caffe::mode()) {
   case Caffe::CPU:
     for (int param_id = 0; param_id < net_params.size(); ++param_id) {
       // Compute the value to history, and then copy them to the blob's diff.
       Dtype local_rate = rate * net_params_lr[param_id];
       Dtype local_decay = weight_decay * net_params_weight_decay[param_id];
+      Dtype weight_constraint = net_params_weight_constraint[param_id];
       caffe_cpu_axpby(net_params[param_id]->count(), local_rate,
           net_params[param_id]->cpu_diff(), momentum,
           history_[param_id]->mutable_cpu_data());
@@ -363,6 +367,14 @@ void SGDSolver<Dtype>::ComputeUpdateValue() {
             net_params[param_id]->cpu_data(),
             history_[param_id]->mutable_cpu_data());
       }
+    }
+    // rescale if necessary
+    if (constrain_weights) {
+        for (int layer_id = 0; layer_id < net_layers.size(); ++layer_id) {
+            net_layers[layer_id]->normalize_weights(net_params_weight_constraint[layer_id]);
+        }
+    }
+    for (int param_id = 0; param_id < net_params.size(); ++param_id) {
       // copy
       caffe_copy(net_params[param_id]->count(),
           history_[param_id]->cpu_data(),
@@ -384,6 +396,14 @@ void SGDSolver<Dtype>::ComputeUpdateValue() {
             net_params[param_id]->gpu_data(),
             history_[param_id]->mutable_gpu_data());
       }
+    }
+    // rescale if necessary
+    if (constrain_weights) {
+        for (int layer_id = 0; layer_id < net_layers.size(); ++layer_id) {
+            net_layers[layer_id]->normalize_weights(net_params_weight_constraint[layer_id]);
+        }
+    }
+    for (int param_id = 0; param_id < net_params.size(); ++param_id) {
       // copy
       caffe_gpu_copy(net_params[param_id]->count(),
           history_[param_id]->gpu_data(),

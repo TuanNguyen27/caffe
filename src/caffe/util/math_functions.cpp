@@ -169,14 +169,25 @@ void caffe_gpu_copy<double>(const int N, const double* X, double* Y) {
   CUBLAS_CHECK(cublasDcopy(Caffe::cublas_handle(), N, X, 1, Y, 1));
 }
 
+
 template <>
-void caffe_scal<float>(const int N, const float alpha, float *X) {
-  cblas_sscal(N, alpha, X, 1);
+void caffe_scal<float>(const int N, const float alpha, float *X, int incx) {
+  cblas_sscal(N, alpha, X, incx);
 }
 
 template <>
-void caffe_scal<double>(const int N, const double alpha, double *X) {
-  cblas_dscal(N, alpha, X, 1);
+void caffe_scal<double>(const int N, const double alpha, double *X, int incx) {
+  cblas_dscal(N, alpha, X, incx);
+}
+
+template <>
+void caffe_gpu_scal<float>(const int N, const float alpha, float *X, int incx) {
+  CUBLAS_CHECK(cublasSscal(Caffe::cublas_handle(), N, &alpha, X, incx));
+}
+
+template <>
+void caffe_gpu_scal<double>(const int N, const double alpha, double *X, int incx) {
+  CUBLAS_CHECK(cublasDscal(Caffe::cublas_handle(), N, &alpha, X, incx));
 }
 
 template <>
@@ -456,6 +467,30 @@ void caffe_gpu_asum<float>(const int n, const float* x, float* y) {
 template <>
 void caffe_gpu_asum<double>(const int n, const double* x, double* y) {
   CUBLAS_CHECK(cublasDasum(Caffe::cublas_handle(), n, x, 1, y));
+}
+
+template <>
+float caffe_cpu_norm2<float>(const int n, const float* x, int incx) {
+  return cblas_snrm2(n, x, incx);
+}
+
+template <>
+double caffe_cpu_norm2<double>(const int n, const double* x, int incx) {
+  return cblas_dnrm2(n, x, incx);
+}
+
+template <>
+float caffe_gpu_norm2<float>(const int n, const float* x, int incx) {
+  float res = 0.;
+  CUBLAS_CHECK(cublasSnrm2(Caffe::cublas_handle(), n, x, incx, &res));
+  return res;
+}
+
+template <>
+double caffe_gpu_norm2<double>(const int n, const double* x, int incx) {
+  double res = 0.;
+  CUBLAS_CHECK(cublasDnrm2(Caffe::cublas_handle(), n, x, incx, &res));
+  return res;
 }
 
 INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sign);
