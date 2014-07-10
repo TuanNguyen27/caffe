@@ -494,6 +494,8 @@ double caffe_gpu_norm2<double>(const int n, const double* x, int incx) {
 }
 
 INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sign);
+using std::signbit;
+DEFINE_CAFFE_CPU_UNARY_FUNC(sgnbit, y[i] = signbit(x[i]));
 INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sgnbit);
 INSTANTIATE_CAFFE_CPU_UNARY_FUNC(fabs);
 
