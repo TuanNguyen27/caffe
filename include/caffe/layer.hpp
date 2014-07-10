@@ -69,6 +69,9 @@ class Layer {
     return LayerParameter_LayerType_Name(type());
   }
 
+  virtual void normalize_weights(Dtype mnorm) {
+  }
+
   // These methods can be overwritten to declare that this layer type expects
   // a certain number of blobs as input and output.
   //

@@ -85,6 +85,7 @@ message SolverParameter {
   optional float power = 10; // The parameter to compute the learning rate.
   optional float momentum = 11; // The momentum value.
   optional float weight_decay = 12; // The weight decay.
+  optional bool weight_constraint = 28 [default = false];  // whether to apply a constraint on the l2 norm
   optional int32 stepsize = 13; // the stepsize for learning rate policy "step"
   optional int32 snapshot = 14 [default = 0]; // The snapshot interval
   optional string snapshot_prefix = 15; // The prefix for the snapshot.
@@ -192,6 +193,8 @@ message LayerParameter {
   repeated float blobs_lr = 7;
   // The weight decay that is multiplied on the global weight decay.
   repeated float weight_decay = 8;
+  // the max norm constraint that is used for this layer
+  optional float max_weight_norm = 31 [default = 1.];
 
   optional ArgMaxParameter argmax_param = 23;
   optional AugmentationParameter augmentation_param = 30;

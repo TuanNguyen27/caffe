@@ -75,8 +75,14 @@ template <typename Dtype>
 void caffe_gpu_add_scalar(const int N, const Dtype alpha, Dtype *X);
 
 template <typename Dtype>
-void caffe_scal(const int N, const Dtype alpha, Dtype *X);
+void caffe_scal(const int N, const Dtype alpha, Dtype *X, int incx);
+template <typename Dtype>
+void caffe_scal(const int N, const Dtype alpha, Dtype *X) {
+    caffe_scal(N, alpha, X, 1);
+}
 
+template <typename Dtype>
+void caffe_gpu_scal(const int N, const Dtype alpha, Dtype *X, int incx);
 template <typename Dtype>
 void caffe_gpu_scal(const int N, const Dtype alpha, Dtype *X);
 
@@ -172,6 +178,13 @@ Dtype caffe_cpu_asum(const int n, const Dtype* x);
 
 template <typename Dtype>
 void caffe_gpu_asum(const int n, const Dtype* x, Dtype* y);
+
+// Returns the l2 norm of a vector
+template <typename Dtype>
+Dtype caffe_cpu_norm2(const int n, const Dtype* x, int incx = 1);
+
+template <typename Dtype>
+Dtype caffe_gpu_norm2(const int n, const Dtype* x, int incx = 1);
 
 // the branchless, type-safe version from
 // http://stackoverflow.com/questions/1903954/is-there-a-standard-sign-function-signum-sgn-in-c-c
