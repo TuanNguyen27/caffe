@@ -526,8 +526,11 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
               eig[c] = eig[c] / max_abs_eig[c]; 
               if (do_pow[c])            
                 eig[c] = static_cast<float>(sgn(eig[c])) * pow(fabs(eig[c]), pow_coeffs[c]);
-              if (do_add[c])
-                eig[c] = eig[c] + add_coeffs[c];
+              if (do_add[c])                 
+                if (sgn(eig[c]) != sgn(eig[c] + add_coeffs[c]))
+                  eig[c] = 0.;
+                else
+                   eig[c] = eig[c] + add_coeffs[c];
               if (do_mult[c])
                 eig[c] = eig[c] * mult_coeffs[c];
             }
