@@ -168,7 +168,7 @@ void Solver<Dtype>::Solve(const char* resume_file) {
     }
   } while (!TerminationCriterionsMet());
   if (param_.snapshot_on_exit()) {
-    iter_--;
+    //iter_--;
     Snapshot();
   }
   LOG(INFO) << "Optimization Done.";
