@@ -114,9 +114,16 @@ Dtype caffe_rng_generate(const RandomGeneratorParameter param) {
 template <typename Dtype>
 void DataAugmentationLayer<Dtype>::SetUp(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top) {
-  CHECK_EQ(bottom.size(), 1) << "Data Layer takes one input blobs.";
-  CHECK_EQ(top->size(), 1) << "Data Layer takes one output blobs.";
+  CHECK_EQ(bottom.size(), 1) << "Data aumentation layer takes one input blob.";
+  CHECK_GE(top->size(), 1) << "Data Layer takes one or two output blobs.";
+  CHECK_LE(top->size(), 2) << "Data Layer takes one or two output blobs.";
 
+  if (top->size() == 1) {
+    output_params_ = false;
+  } else {
+    output_params_ = true;
+  }
+  
   const int num = bottom[0]->num();
   const int channels = bottom[0]->channels();
   const int height = bottom[0]->height();
@@ -146,15 +153,29 @@ void DataAugmentationLayer<Dtype>::SetUp(const vector<Blob<Dtype>*>& bottom,
   CHECK_GE(height, crop_size) << "crop size greater than original";
   CHECK_GE(width, crop_size) << "crop size greater than original";
   
-  cropped_height = crop_size;
-  cropped_width = crop_size;
+  cropped_height_ = crop_size;
+  cropped_width_ = crop_size;
 
   (*top)[0]->Reshape(num, channels, crop_size, crop_size);
+  
+  if (output_params_) {
+    num_params_ = 20;
+    (*top)[1]->Reshape(num, num_params_, 1, 1);
+  }
+  
+  if (this->layer_param_.augmentation_param().recompute_mean()) {
+    data_mean_.Reshape(1, channels, crop_size, crop_size);
+  }
+  
+  num_iter_ = 0;
+  
 }
 
 template <typename Dtype>
 Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     vector<Blob<Dtype>*>* top) {
+  
+  num_iter_++;
 
   AugmentationParameter aug = this->layer_param_.augmentation_param();
   if (!aug.has_crop_size())
@@ -166,8 +187,7 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   const int width = bottom[0]->width();
 
   const Dtype* bottom_data = bottom[0]->cpu_data();
-  Dtype* top_data = (*top)[0]->mutable_cpu_data(); 
-  
+  Dtype* top_data = (*top)[0]->mutable_cpu_data();  
   
   std::string write_augmented;
   if (aug.has_write_augmented())
@@ -175,11 +195,11 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
   else
     write_augmented = std::string("");
   
-  
+  bool augment_during_test = aug.augment_during_test();  
   bool train_phase = (Caffe::phase() == Caffe::TRAIN);
   //LOG(INFO) <<  " === train_phase " << train_phase;
   
-#pragma omp parallel for firstprivate(aug, train_phase, write_augmented)
+#pragma omp parallel for firstprivate(aug, train_phase, write_augmented, augment_during_test)
   for (int item_id = 0; item_id < num; ++item_id) {
     
     int x, y, c, top_idx, bottom_idx, h_off, w_off;
@@ -217,8 +237,14 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     Dtype add_factor;
     Dtype col_angle;
     
+    if (output_params_) {
+      Dtype* top_params = (*top)[1]->mutable_cpu_data();
+      for (int i=0; i<num_params_; i++)
+        top_params[item_id * num_params_ + i] = 0.;
+    }
+    
     //   We only do transformations during training.
-    if (!train_phase) {
+    if (!(train_phase || augment_during_test)) {
       do_spatial_transform   = false;
       do_chromatic_transform = false;
     }
@@ -333,6 +359,19 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
         do_zoom = (fabs(zoom_coeff - 1.) >1e-2);
       
       do_spatial_transform = (do_rotate || do_translate || do_mirror || do_zoom);
+      if (output_params_) {
+        Dtype* top_params = (*top)[1]->mutable_cpu_data();
+        if (do_mirror)
+          top_params[item_id * num_params_ + 0] = 1.;
+        if (do_translate) {
+          top_params[item_id * num_params_ + 1] = dx;
+          top_params[item_id * num_params_ + 2] = dy;
+        }
+        if (do_rotate)
+          top_params[item_id * num_params_ + 3] = angle;
+        if (do_zoom)
+          top_params[item_id * num_params_ + 4] = log(zoom_coeff);
+      }
     } 
     
     if (do_chromatic_transform) {
@@ -406,6 +445,36 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
       if (do_col_rotate)
         do_col_rotate = (fabs(col_angle) > 1e-2);
       do_chromatic_transform = (do_chromatic_transform || do_lmult_pow || do_lmult_add || do_lmult_mult || do_col_rotate);
+      
+      if (output_params_) {
+        Dtype* top_params = (*top)[1]->mutable_cpu_data();
+        if (do_lmult_pow)
+          top_params[item_id * num_params_ + 5] = log(lmult_pow_coeff);
+        if (do_lmult_add)
+          top_params[item_id * num_params_ + 6] = lmult_add_coeff;
+        if (do_lmult_mult)
+          top_params[item_id * num_params_ + 7] = log(lmult_mult_coeff);
+        if (do_pow[0])
+          top_params[item_id * num_params_ + 8] = log(pow_coeffs[0]);
+        if (do_add[0])
+          top_params[item_id * num_params_ + 9] = add_coeffs[0];
+        if (do_mult[0])
+          top_params[item_id * num_params_ + 10] = log(mult_coeffs[0]);
+        if (do_pow[1])
+          top_params[item_id * num_params_ + 11] = log(pow_coeffs[1]);
+        if (do_add[1])
+          top_params[item_id * num_params_ + 12] = add_coeffs[1];
+        if (do_mult[1])
+          top_params[item_id * num_params_ + 13] = log(mult_coeffs[1]);
+        if (do_pow[2])
+          top_params[item_id * num_params_ + 14] = log(pow_coeffs[2]);
+        if (do_add[2])
+          top_params[item_id * num_params_ + 15] = add_coeffs[2];
+        if (do_mult[2])
+          top_params[item_id * num_params_ + 16] = log(mult_coeffs[2]);
+        if (do_col_rotate)
+          top_params[item_id * num_params_ + 17] = col_angle;       
+      }
     }      
     
     
@@ -578,6 +647,27 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     
   }
   
+  if(aug.recompute_mean() > 0 && num_iter_ <= aug.recompute_mean() ) {
+    Dtype* data_mean_cpu = data_mean_.mutable_cpu_data();
+    int count = crop_size*crop_size*channels;    
+    for (int c = 0; c < count; ++c) {
+      data_mean_cpu[c] = data_mean_cpu[c]*(static_cast<Dtype>(num_iter_)-1);
+      for (int item_id = 0; item_id < num; ++item_id) 
+        data_mean_cpu[c] = data_mean_cpu[c] + top_data[item_id*count + c] / num;
+      data_mean_cpu[c] = data_mean_cpu[c] / static_cast<Dtype>(num_iter_);      
+    }  
+  }
+    
+  if(aug.recompute_mean() > 0) {
+    Dtype* data_mean_cpu = data_mean_.mutable_cpu_data();
+    int count = crop_size*crop_size*channels;   
+    for (int item_id = 0; item_id < num; ++item_id) {
+      for (int c = 0; c < count; ++c) {
+        top_data[item_id*count + c] = top_data[item_id*count + c] - data_mean_cpu[c];
+      }
+    }    
+  }
+  
   if (write_augmented.size()) {  
     std::ofstream out_file (write_augmented.data(), std::ios::out | std::ios::binary);
     if (out_file.is_open()) { 
@@ -597,6 +687,29 @@ Dtype DataAugmentationLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bott
     else
       LOG(INFO) << "WARNING: Could not open the file" << write_augmented;
   }
+  
+  if (aug.write_mean().size()) {  
+    std::ofstream out_file (aug.write_mean().data(), std::ios::out | std::ios::binary);
+    if (out_file.is_open()) { 
+      uint32_t imsize[4];
+      imsize[0] = 1; 
+      imsize[1] = channels; 
+      imsize[2] = crop_size; 
+      imsize[3] = crop_size;
+      Dtype* data_mean_cpu = data_mean_.mutable_cpu_data();
+      LOG(INFO) << "Writing blob size " << imsize[0] << "x" << imsize[1] << "x" << imsize[2] << "x" << imsize[3];
+      out_file.write(reinterpret_cast<char*>(&imsize[0]), 4*4);
+      out_file.write(reinterpret_cast<const char*>(data_mean_cpu), imsize[0]*imsize[1]*imsize[2]*imsize[3]*sizeof(float));
+      out_file.close();
+      LOG(INFO) << " finished writing the mean. num_iter_=" << num_iter_ << " === PAUSED === ";
+      std::cout << " finished writing the mean. num_iter_=" << num_iter_ << " === PAUSED === ";
+      std::cin.get();
+    }
+    else
+      LOG(INFO) << "WARNING: Could not open the file" << write_augmented;
+  }
+  
+  
  
   
 //   for (int item_id = 0; item_id < num; ++item_id) {

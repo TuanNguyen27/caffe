@@ -210,6 +210,7 @@ message LayerParameter {
   optional ImageDataParameter image_data_param = 15;
   optional InfogainLossParameter infogain_loss_param = 16;
   optional InnerProductParameter inner_product_param = 17;
+  optional LossParameter loss_param = 32;
   optional LRNParameter lrn_param = 18;
   optional MemoryDataParameter memory_data_param = 22;
   optional PoolingParameter pooling_param = 19;
@@ -217,6 +218,7 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 20;
   optional ThresholdParameter threshold_param = 25;
   optional HingeLossParameter hinge_loss_param = 29;
+  
   
 
   // DEPRECATED: The layer parameters specified as a V0LayerParameter.
@@ -236,6 +238,9 @@ message AugmentationParameter {
   optional uint32 crop_size = 1 [default = 0 ];
   optional string write_augmented = 2 [default = ""];
   optional float max_multiplier = 3 [default = 100.];
+  optional bool augment_during_test = 4 [default = false];
+  optional uint32 recompute_mean = 5 [default = 0]; // number of iterations to recompute mean (0 - do not recompute)
+  optional string write_mean = 6 [default = ""];
   optional RandomGeneratorParameter mirror = 10;
   optional RandomGeneratorParameter translate = 11 ;
   optional RandomGeneratorParameter rotate = 12 ;
@@ -421,6 +426,11 @@ message InnerProductParameter {
   optional bool bias_term = 2 [default = true]; // whether to have bias terms
   optional FillerParameter weight_filler = 3; // The filler for the weight
   optional FillerParameter bias_filler = 4; // The filler for the bias
+}
+
+message LossParameter {
+  // Specify the infogain matrix source.
+  optional float coeff = 1 [default = 1.];
 }
 
 // Message that stores parameters used by LRNLayer

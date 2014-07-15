@@ -350,8 +350,12 @@ class DataAugmentationLayer : public Layer<Dtype> {
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const bool propagate_down, vector<Blob<Dtype>*>* bottom)  { return; }
 
-  int cropped_height;
-  int cropped_width;
+  int cropped_height_;
+  int cropped_width_;
+  bool output_params_;
+  int num_params_;
+  Blob<Dtype> data_mean_;
+  int num_iter_;
 };
 
 // This function is used to create a pthread that prefetches the data.

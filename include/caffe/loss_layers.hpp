@@ -99,6 +99,7 @@ class EuclideanLossLayer : public LossLayer<Dtype> {
       const bool propagate_down, vector<Blob<Dtype>*>* bottom);
 
   Blob<Dtype> diff_;
+  Dtype coeff_;
 };
 
 /* InfogainLossLayer

@@ -157,7 +157,12 @@ void Solver<Dtype>::Solve(const char* resume_file) {
     net_->Update();
 
     if (param_.display() && iter_ % param_.display() == 0) {
-      LOG(INFO) << "Iteration " << iter_ << ", loss = " << loss;
+      //LOG(INFO) << "Iteration " << iter_ << ", loss = " << loss; 
+      int num_loss = 1;
+      for(std::vector<float>::iterator it = net_->losses().begin(); it != net_->losses().end(); ++it) {
+        LOG(INFO) << "Iteration " << iter_ << ", loss #" << num_loss << " = " << *it;
+        num_loss++;
+      }
     }
     if (param_.test_interval() && iter_ % param_.test_interval() == 0) {
       TestAll();

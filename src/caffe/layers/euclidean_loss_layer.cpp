@@ -22,6 +22,10 @@ void EuclideanLossLayer<Dtype>::FurtherSetUp(
   CHECK_EQ(bottom[0]->width(), bottom[1]->width());
   diff_.Reshape(bottom[0]->num(), bottom[0]->channels(),
       bottom[0]->height(), bottom[0]->width());
+  if (this->layer_param_.has_loss_param())
+    coeff_ = this->layer_param_.loss_param().coeff();
+  else
+    coeff_ = 1.;
 }
 
 template <typename Dtype>
@@ -34,7 +38,7 @@ Dtype EuclideanLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       bottom[1]->cpu_data(),
       diff_.mutable_cpu_data());
   Dtype dot = caffe_cpu_dot(count, diff_.cpu_data(), diff_.cpu_data());
-  Dtype loss = dot / bottom[0]->num() / Dtype(2);
+  Dtype loss = coeff_ * dot / bottom[0]->num() / Dtype(2);
   return loss;
 }
 
@@ -43,7 +47,7 @@ void EuclideanLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const bool propagate_down, vector<Blob<Dtype>*>* bottom) {
   caffe_cpu_axpby(
       (*bottom)[0]->count(),              // count
-      Dtype(1) / (*bottom)[0]->num(),     // alpha
+      coeff_ / (*bottom)[0]->num(),     // alpha
       diff_.cpu_data(),                   // a
       Dtype(0),                           // beta
       (*bottom)[0]->mutable_cpu_diff());  // b
