@@ -118,18 +118,21 @@ def _Net_forward_all(self, blobs=None, **kwargs):
     """
     # Collect outputs from batches
     all_outs = {out: [] for out in set(self.outputs + (blobs or []))}
+
     for batch in self._batch(kwargs):
         outs = self.forward(blobs=blobs, **batch)
+        print outs
         for out, out_blob in outs.iteritems():
             all_outs[out].extend(out_blob.copy())
     # Package in ndarray.
     for out in all_outs:
         all_outs[out] = np.asarray(all_outs[out])
     # Discard padding.
-    pad = len(all_outs.itervalues().next()) - len(kwargs.itervalues().next())
-    if pad:
-        for out in all_outs:
-            all_outs[out] = all_outs[out][:-pad]
+    if kwargs:
+        pad = len(all_outs.itervalues().next()) - len(kwargs.itervalues().next())
+        if pad:
+            for out in all_outs:
+                all_outs[out] = all_outs[out][:-pad]
     return all_outs
 
 
@@ -258,6 +261,7 @@ def _Net_preprocess(self, input_name, input_):
     """
     caffe_in = input_.astype(np.float32)
     input_scale = self.input_scale.get(input_name)
+
     channel_order = self.channel_swap.get(input_name)
     mean = self.mean.get(input_name)
     in_size = self.blobs[input_name].data.shape[2:]
